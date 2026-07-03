@@ -364,6 +364,7 @@ function render() {
   drawAzByHole(data);
   drawDepthByHole(data);
   drawByPlan(data);
+  drawMap();
   drawHist("chart-hist-az", data.map((r) => r.azDelta).filter((v) => v != null), {
     unit: "°", limit: LIMITS.azimuth, bins: 20,
   });
@@ -837,6 +838,273 @@ function exportToXlsx() {
 
   const fname = `desvios-perfuracao_${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}.xlsx`;
   XLSX.writeFile(wb, fname);
+}
+
+/* ===================== Mapa de execução (DXF) ===================== */
+/* Convenção: cada plano tem um arquivo DXF em ./data/<PLANO>.dxf
+   (mesmo nome da coluna Plano na planilha). Adicionar um novo plano
+   à planilha + colocar o DXF na pasta faz o mapa aparecer automaticamente. */
+
+const DXF_CACHE = new Map();   // plano -> Promise<holes | null>
+const DXF_MISS = new Set();    // planos sem DXF (evita re-tentar)
+
+async function fetchDxfHoles(plano) {
+  if (DXF_MISS.has(plano)) return null;
+  if (DXF_CACHE.has(plano)) return DXF_CACHE.get(plano);
+  const promise = (async () => {
+    try {
+      const res = await fetch(`./data/${encodeURIComponent(plano)}.dxf`, { cache: "no-store" });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const txt = await res.text();
+      return parseDxfHoles(txt);
+    } catch (e) {
+      DXF_MISS.add(plano);
+      return null;
+    }
+  })();
+  DXF_CACHE.set(plano, promise);
+  return promise;
+}
+
+/* Parser DXF minimalista.
+   Cada furo é composto por:
+     POINT   layer "Hole"            -> emboque
+     LINE    layer "Theoretical Hole"-> reta planejada
+     POLYLINE layer "Real Hole"      -> polilinha executada
+   Camadas com iniciais diferentes (ex. "hole" minúsculo) são tratadas por norm(). */
+function parseDxfHoles(text) {
+  const lines = text.replace(/\r/g, "").split("\n").map((s) => s.trim());
+  const pairs = [];
+  for (let i = 0; i < lines.length - 1; i += 2) pairs.push([lines[i], lines[i + 1]]);
+
+  const entities = [];
+  let inEntities = false, i = 0;
+  while (i < pairs.length) {
+    const [code, value] = pairs[i];
+    if (code === "2" && value === "ENTITIES") { inEntities = true; i++; continue; }
+    if (!inEntities) { i++; continue; }
+    if (code === "0" && value === "ENDSEC") break;
+    if (code === "0") {
+      const entity = { type: value, raw: [] };
+      i++;
+      while (i < pairs.length && pairs[i][0] !== "0") { entity.raw.push(pairs[i]); i++; }
+      if (entity.type === "POLYLINE") {
+        entity.verts = [];
+        while (i < pairs.length) {
+          const [nc, nv] = pairs[i];
+          if (nc === "0" && nv === "VERTEX") {
+            const vraw = [];
+            i++;
+            while (i < pairs.length && pairs[i][0] !== "0") { vraw.push(pairs[i]); i++; }
+            entity.verts.push(vraw);
+            continue;
+          }
+          if (nc === "0" && nv === "SEQEND") {
+            i++;
+            while (i < pairs.length && pairs[i][0] !== "0") i++;
+            break;
+          }
+          break;
+        }
+      }
+      entities.push(entity);
+      continue;
+    }
+    i++;
+  }
+
+  const gf = (raw, code, fb = "") => {
+    const found = raw.find(([c]) => c === String(code));
+    return found ? found[1] : fb;
+  };
+  const gn = (raw, code, fb = NaN) => {
+    const v = parseFloat(gf(raw, code, ""));
+    return isFinite(v) ? v : fb;
+  };
+  const layerOf = (e) => norm(gf(e.raw, 8, ""));
+  const pt = (raw) => ({ x: gn(raw, 10), y: gn(raw, 20) });
+
+  const holes = [];
+  let cur = null;
+  const push = () => { if (cur && (cur.planned || cur.real)) holes.push(cur); cur = null; };
+  for (const e of entities) {
+    const layer = layerOf(e);
+    if (e.type === "POINT" && layer === "HOLE") {
+      push();
+      cur = { collar: pt(e.raw) };
+      continue;
+    }
+    if (!cur) cur = {};
+    if (e.type === "LINE" && layer === "THEORETICAL HOLE") {
+      cur.planned = [
+        { x: gn(e.raw, 10), y: gn(e.raw, 20) },
+        { x: gn(e.raw, 11), y: gn(e.raw, 21) },
+      ];
+    } else if (e.type === "POLYLINE" && layer === "REAL HOLE") {
+      cur.real = e.verts.map(pt).filter((p) => isFinite(p.x) && isFinite(p.y));
+    }
+  }
+  push();
+
+  return holes.filter((h) => (h.planned && h.planned.every((p) => isFinite(p.x) && isFinite(p.y))) ||
+                             (h.real && h.real.length >= 2));
+}
+
+let MAP_TOKEN = 0;
+
+async function drawMap() {
+  const svg = document.getElementById("chart-map");
+  const status = document.getElementById("map-status");
+  const subtitle = document.getElementById("map-subtitle");
+  if (!svg) return;
+
+  const selected = document.getElementById("filter-plan").value;
+  const y = document.getElementById("filter-year").value;
+  const mo = document.getElementById("filter-month").value;
+  const planosSet = new Set(
+    RECORDS
+      .filter((r) =>
+        (!y || String(r.ano) === y) &&
+        (!mo || String(r.mes) === mo) &&
+        (!selected || r.plano === selected))
+      .map((r) => r.plano)
+  );
+  const planos = [...planosSet].sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
+
+  const token = ++MAP_TOKEN;
+  svg.innerHTML = "";
+  status.classList.add("is-visible");
+  status.textContent = "Carregando geometria dos planos…";
+
+  if (!planos.length) {
+    status.textContent = "Nenhum plano no filtro atual.";
+    subtitle.textContent = "Planejado em cinza, executado em vermelho e emboques marcados.";
+    return;
+  }
+
+  subtitle.textContent = selected
+    ? `Plano ${selected} — planejado em cinza, executado em vermelho, emboques marcados.`
+    : `${planos.length} plano(s) sobrepostos — planejado em cinza, executado em vermelho, emboques marcados.`;
+
+  const results = await Promise.all(planos.map((p) => fetchDxfHoles(p).then((h) => ({ plano: p, holes: h }))));
+  if (token !== MAP_TOKEN) return;
+
+  const withGeom = results.filter((r) => r.holes && r.holes.length);
+  const missing = results.filter((r) => !r.holes || !r.holes.length).map((r) => r.plano);
+
+  if (!withGeom.length) {
+    status.classList.add("is-visible");
+    status.textContent = selected
+      ? `Sem DXF disponível para ${selected}.`
+      : "Nenhum DXF disponível para os planos do filtro.";
+    return;
+  }
+  status.classList.remove("is-visible");
+
+  // Bounding box conjugado
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  const pushPt = (p) => {
+    if (!isFinite(p.x) || !isFinite(p.y)) return;
+    if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+  };
+  withGeom.forEach(({ holes }) => holes.forEach((h) => {
+    if (h.collar) pushPt(h.collar);
+    if (h.planned) h.planned.forEach(pushPt);
+    if (h.real) h.real.forEach(pushPt);
+  }));
+  if (!isFinite(minX) || !isFinite(maxY)) {
+    status.classList.add("is-visible");
+    status.textContent = "Geometria vazia para os DXFs encontrados.";
+    return;
+  }
+
+  const width = 1200, height = 500, pad = 32;
+  const rangeX = Math.max(maxX - minX, 1);
+  const rangeY = Math.max(maxY - minY, 1);
+  const scale = Math.min((width - pad * 2) / rangeX, (height - pad * 2) / rangeY);
+  const drawnW = rangeX * scale;
+  const drawnH = rangeY * scale;
+  const offX = (width - drawnW) / 2 - minX * scale;
+  const offY = (height - drawnH) / 2;
+  const tx = (x) => offX + x * scale;
+  const ty = (y) => height - (offY + (y - minY) * scale); // inverte Y (norte para cima)
+
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  const NS = "http://www.w3.org/2000/svg";
+  const frag = document.createDocumentFragment();
+
+  // Grid discreto
+  const grid = document.createElementNS(NS, "g");
+  grid.setAttribute("class", "map-grid");
+  const gridStep = niceStep(Math.max(rangeX, rangeY) / 10);
+  for (let gx = Math.ceil(minX / gridStep) * gridStep; gx <= maxX; gx += gridStep) {
+    const line = document.createElementNS(NS, "line");
+    line.setAttribute("x1", tx(gx)); line.setAttribute("x2", tx(gx));
+    line.setAttribute("y1", 0); line.setAttribute("y2", height);
+    grid.appendChild(line);
+  }
+  for (let gy = Math.ceil(minY / gridStep) * gridStep; gy <= maxY; gy += gridStep) {
+    const line = document.createElementNS(NS, "line");
+    line.setAttribute("y1", ty(gy)); line.setAttribute("y2", ty(gy));
+    line.setAttribute("x1", 0); line.setAttribute("x2", width);
+    grid.appendChild(line);
+  }
+  frag.appendChild(grid);
+
+  // Linhas planejadas
+  const plannedG = document.createElementNS(NS, "g");
+  plannedG.setAttribute("class", "map-line--planned");
+  // Linhas executadas
+  const realG = document.createElementNS(NS, "g");
+  realG.setAttribute("class", "map-line--real");
+  // Emboques
+  const collarG = document.createElementNS(NS, "g");
+  collarG.setAttribute("class", "map-collar");
+
+  withGeom.forEach(({ holes }) => {
+    holes.forEach((h) => {
+      if (h.planned && h.planned.length >= 2) {
+        const [a, b] = h.planned;
+        const line = document.createElementNS(NS, "line");
+        line.setAttribute("x1", tx(a.x)); line.setAttribute("y1", ty(a.y));
+        line.setAttribute("x2", tx(b.x)); line.setAttribute("y2", ty(b.y));
+        plannedG.appendChild(line);
+      }
+      if (h.real && h.real.length >= 2) {
+        const pts = h.real.map((p) => `${tx(p.x)},${ty(p.y)}`).join(" ");
+        const pl = document.createElementNS(NS, "polyline");
+        pl.setAttribute("points", pts);
+        realG.appendChild(pl);
+      }
+      const c = h.collar || (h.planned && h.planned[0]) || (h.real && h.real[0]);
+      if (c && isFinite(c.x) && isFinite(c.y)) {
+        const dot = document.createElementNS(NS, "circle");
+        dot.setAttribute("cx", tx(c.x));
+        dot.setAttribute("cy", ty(c.y));
+        dot.setAttribute("r", selected ? 2.6 : 1.9);
+        collarG.appendChild(dot);
+      }
+    });
+  });
+
+  frag.appendChild(plannedG);
+  frag.appendChild(realG);
+  frag.appendChild(collarG);
+  svg.appendChild(frag);
+
+  if (missing.length) {
+    const note = missing.length > 4 ? `${missing.slice(0, 4).join(", ")}, +${missing.length - 4}` : missing.join(", ");
+    subtitle.textContent += ` · Sem DXF: ${note}.`;
+  }
+}
+
+function niceStep(raw) {
+  if (!isFinite(raw) || raw <= 0) return 10;
+  const pow = Math.pow(10, Math.floor(Math.log10(raw)));
+  const norm = raw / pow;
+  const step = norm < 1.5 ? 1 : norm < 3 ? 2 : norm < 7 ? 5 : 10;
+  return step * pow;
 }
 
 /* ===================== Boot ===================== */

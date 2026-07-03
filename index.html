@@ -6,7 +6,7 @@
   <title>Inclinação, Azimute e Profundidade · US Vale Verde</title>
   <meta name="description" content="Análise de desvios de inclinação, azimute e profundidade dos furos de perfuração — US Vale Verde.">
   <link rel="preconnect" href="https://docs.google.com">
-  <link rel="stylesheet" href="./styles.css?v=3">
+  <link rel="stylesheet" href="./styles.css?v=4">
 </head>
 <body>
   <header class="topbar">
@@ -97,6 +97,23 @@
     </section>
 
     <section class="chart-stack">
+      <div class="chart-block" id="map-card">
+        <div class="chart-block__head">
+          <p class="chart-block__eyebrow">GEOMETRIA</p>
+          <h2>Mapa de execução</h2>
+          <p id="map-subtitle">Planejado em cinza, executado em vermelho e emboques marcados.</p>
+        </div>
+        <div class="chart-block__body chart-block__body--map">
+          <div id="map-legend" class="map-legend">
+            <span class="map-legend__item"><span class="map-legend__swatch map-legend__swatch--planned"></span>Planejado</span>
+            <span class="map-legend__item"><span class="map-legend__swatch map-legend__swatch--real"></span>Executado</span>
+            <span class="map-legend__item"><span class="map-legend__swatch map-legend__swatch--collar"></span>Emboque</span>
+          </div>
+          <div id="map-status" class="map-status" aria-live="polite"></div>
+          <svg id="chart-map" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
+      </div>
+
       <div class="chart-block">
         <div class="chart-block__head">
           <h2>Ângulo frontal por furo</h2>
@@ -176,6 +193,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="./app.js?v=4"></script>
+  <script src="./app.js?v=5"></script>
 </body>
 </html>
