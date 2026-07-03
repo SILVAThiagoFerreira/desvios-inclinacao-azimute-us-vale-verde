@@ -86,6 +86,7 @@ async function loadSheet() {
     return;
   }
   populateFilters();
+  setupExport();
   setStatus("ok", `${RECORDS.length} furos carregados.`);
   document.getElementById("last-update").textContent = "Atualizado em " + nowBR();
   render();
@@ -669,6 +670,85 @@ function drawHist(canvasId, values, opts = {}) {
       },
     },
   });
+}
+
+/* ===================== Exportação Excel ===================== */
+function setupExport() {
+  const btn = document.getElementById("export-xlsx");
+  if (!btn) return;
+  btn.onclick = exportToXlsx;
+}
+
+function exportToXlsx() {
+  if (typeof XLSX === "undefined") {
+    alert("Biblioteca de exportação ainda carregando. Aguarde alguns segundos e tente novamente.");
+    return;
+  }
+  const data = filtered();
+  if (!data.length) {
+    alert("Nenhum furo no filtro atual para exportar.");
+    return;
+  }
+
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const dataStr = `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()}`;
+  const ano = now.getFullYear();
+  const meses = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+  const mes = meses[now.getMonth()];
+
+  const withinAngle = (v) => v != null && v >= LIMITS.angleMin && v <= LIMITS.angleMax;
+  const withinAz = (v) => v != null && Math.abs(v) <= LIMITS.azimuth;
+  const withinZ = (v) => v != null && Math.abs(v) <= LIMITS.depth;
+
+  const rows = data.map((r) => ({
+    "Ano": ano,
+    "Mês": mes,
+    "Data": dataStr,
+    "Plano": r.plano,
+    "ID": r.id,
+    "Ângulo frontal (°)": r.angle,
+    "Azimute planejado (°)": r.azPlan,
+    "Azimute executado (°)": r.azExec,
+    "Δ Azimute (°)": r.azDelta,
+    "Profundidade planejada (m)": r.depthPlan,
+    "Profundidade executada (m)": r.depthExec,
+    "Δ Profundidade (m)": r.depthDelta,
+    "Ângulo dentro do limite": r.angle == null ? "" : (withinAngle(r.angle) ? "Sim" : "Não"),
+    "Azimute dentro do limite": r.azDelta == null ? "" : (withinAz(r.azDelta) ? "Sim" : "Não"),
+    "Z dentro do limite": r.depthDelta == null ? "" : (withinZ(r.depthDelta) ? "Sim" : "Não"),
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  // largura de coluna aproximada
+  const cols = Object.keys(rows[0]).map((k) => ({
+    wch: Math.max(k.length + 2, 12),
+  }));
+  ws["!cols"] = cols;
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Desvios");
+
+  // Aba de resumo com métricas
+  const m = computeMetrics(data);
+  const resumo = [
+    ["Relatório de Desvios de Perfuração"],
+    ["Gerado em", dataStr],
+    ["Ano", ano],
+    ["Mês", mes],
+    [],
+    ["Furos analisados", m.total],
+    ["Aderência Ângulo (%)", isFinite(m.anglePct) ? +m.anglePct.toFixed(2) : ""],
+    ["Aderência Azimute (%)", isFinite(m.azPct) ? +m.azPct.toFixed(2) : ""],
+    ["Aderência Z (%)", isFinite(m.zPct) ? +m.zPct.toFixed(2) : ""],
+    ["Meta (%)", LIMITS.meta],
+  ];
+  const wsResumo = XLSX.utils.aoa_to_sheet(resumo);
+  wsResumo["!cols"] = [{ wch: 28 }, { wch: 20 }];
+  XLSX.utils.book_append_sheet(wb, wsResumo, "Resumo");
+
+  const fname = `desvios-perfuracao_${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}.xlsx`;
+  XLSX.writeFile(wb, fname);
 }
 
 /* ===================== Boot ===================== */
