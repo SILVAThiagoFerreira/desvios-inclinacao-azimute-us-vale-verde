@@ -1,10 +1,10 @@
 /* =====================================================================
    Desvios de Perfuração — Inclinação, Azimute e Profundidade
    US Vale Verde · atualiza em tempo real via Google Sheets (gviz + CSV).
-   Parâmetros da ferramenta ANALISE DE DESVIOS DE INCLINAÇÃO E AZIMUTE:
-     ângulo frontal 12° a 18° (esperado 15°, tol. ±3°)
-     Δ azimute ±5° (esperado 0°)
-     Δ profundidade ±0,25 m (esperado 0,00 m)
+   Parâmetros atuais do sistema:
+     ângulo frontal 15° ± 3,2° (faixa 11,8° a 18,2°)
+     Δ azimute 0° ± 6,39°
+     Δ profundidade 0,00 m ± 0,20 m (20 cm)
      meta 80% de aderência
    ===================================================================== */
 
@@ -13,9 +13,9 @@ const GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx
 const CSV_URL  = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
 
 const LIMITS = {
-  angleMin: 12, angleMax: 18, angleExpected: 15,
-  azimuth: 5,
-  depth: 0.25,
+  angleMin: 11.8, angleMax: 18.2, angleExpected: 15, angleTol: 3.2,
+  azimuth: 6.39,
+  depth: 0.20,
   meta: 80,
 };
 

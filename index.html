@@ -6,7 +6,7 @@
   <title>Inclinação, Azimute e Profundidade · US Vale Verde</title>
   <meta name="description" content="Análise de desvios de inclinação, azimute e profundidade dos furos de perfuração — US Vale Verde.">
   <link rel="preconnect" href="https://docs.google.com">
-  <link rel="stylesheet" href="./styles.css?v=2">
+  <link rel="stylesheet" href="./styles.css?v=3">
 </head>
 <body>
   <header class="topbar">
@@ -53,17 +53,17 @@
         <div class="control">
           <p class="control__k">Ângulo frontal</p>
           <p class="control__v">15,00°</p>
-          <p class="control__s">Limites 12° a 18° · tolerância ±3°</p>
+          <p class="control__s">Faixa 11,8° a 18,2° · tolerância ±3,2°</p>
         </div>
         <div class="control">
           <p class="control__k">Δ Azimute</p>
           <p class="control__v">0,00°</p>
-          <p class="control__s">Limites −5° a +5° · tolerância ±5°</p>
+          <p class="control__s">Limites −6,39° a +6,39° · tolerância ±6,39°</p>
         </div>
         <div class="control">
           <p class="control__k">Δ Profundidade (Z)</p>
           <p class="control__v">0,00 m</p>
-          <p class="control__s">Limites −0,25 m a +0,25 m · tolerância ±0,25 m</p>
+          <p class="control__s">Limites −0,20 m a +0,20 m · tolerância ±0,20 m (20 cm)</p>
         </div>
         <div class="control">
           <p class="control__k">Meta de aderência</p>
@@ -82,17 +82,17 @@
       <div class="kpi" id="kpi-angle-card">
         <p class="kpi__label">ADERÊNCIA ÂNGULO</p>
         <p class="kpi__value" id="kpi-angle">—</p>
-        <p class="kpi__sub" id="kpi-angle-hint">Dentro de 12° – 18°</p>
+        <p class="kpi__sub" id="kpi-angle-hint">Dentro de 11,8° – 18,2°</p>
       </div>
       <div class="kpi" id="kpi-az-card">
         <p class="kpi__label">ADERÊNCIA AZIMUTE</p>
         <p class="kpi__value" id="kpi-az">—</p>
-        <p class="kpi__sub" id="kpi-az-hint">|ΔAz| ≤ 5°</p>
+        <p class="kpi__sub" id="kpi-az-hint">|ΔAz| ≤ 6,39°</p>
       </div>
       <div class="kpi" id="kpi-z-card">
         <p class="kpi__label">ADERÊNCIA Z</p>
         <p class="kpi__value" id="kpi-z">—</p>
-        <p class="kpi__sub" id="kpi-z-hint">|ΔProf| ≤ 0,25 m</p>
+        <p class="kpi__sub" id="kpi-z-hint">|ΔProf| ≤ 0,20 m</p>
       </div>
     </section>
 
@@ -100,7 +100,7 @@
       <div class="chart-block">
         <div class="chart-block__head">
           <h2>Ângulo frontal por furo</h2>
-          <p>Inclinação executada de cada furo em relação à vertical · linhas: limites 12° e 18°</p>
+          <p>Inclinação executada de cada furo em relação à vertical · linhas: limites 11,8° e 18,2°</p>
         </div>
         <div class="chart-block__body chart-block__body--tall"><canvas id="chart-angle"></canvas></div>
       </div>
@@ -108,7 +108,7 @@
       <div class="chart-block">
         <div class="chart-block__head">
           <h2>Direção dos furos — Δ Azimute × Δ Profundidade</h2>
-          <p>Cada ponto é um furo · retângulo interno = zona de aderência (±5° e ±0,25 m)</p>
+          <p>Cada ponto é um furo · retângulo interno = zona de aderência (±6,39° e ±0,20 m)</p>
         </div>
         <div class="chart-block__body chart-block__body--vf"><canvas id="chart-direction"></canvas></div>
       </div>
@@ -168,14 +168,14 @@
     <p class="source-note">
       <strong>Fonte:</strong> planilha consolidada de furos perfurados da US Vale Verde, lida em tempo real.
       <strong>Base de cálculo:</strong> ângulo frontal = inclinação executada em relação à vertical; Δ Azimute = azimute executado − azimute planejado; Δ Profundidade = profundidade executada − planejada.
-      <strong>Parâmetros de controle</strong> conforme ferramenta ANALISE DE DESVIOS DE INCLINAÇÃO E AZIMUTE (OpenBlast):
-      ângulo 12° a 18° (esperado 15°, tol. ±3°), Δ Azimute ±5° (esperado 0°), Δ Profundidade ±0,25 m (esperado 0,00 m), meta de aderência 80%.
+      <strong>Parâmetros atuais do sistema:</strong>
+      ângulo frontal 15° ± 3,2° (faixa 11,8° a 18,2°), Δ Azimute 0° ± 6,39°, Δ Profundidade 0,00 m ± 0,20 m (20 cm), meta de aderência 80%.
       Furos sem base geométrica em planta são desconsiderados apenas para o cálculo direcional.
     </p>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="./app.js?v=3"></script>
+  <script src="./app.js?v=4"></script>
 </body>
 </html>
