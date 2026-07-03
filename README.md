@@ -1,15 +1,15 @@
 # Desvios de Perfuração — Inclinação, Azimute e Profundidade
 
 Dashboard estático (HTML/CSS/JS) que consome em tempo real a planilha Google Sheets
-consolidada de furos perfurados e apresenta a aderência ao projeto conforme os parâmetros
-da ferramenta **ANALISE DE DESVIOS DE INCLINAÇÃO E AZIMUTE** (OpenBlast):
+consolidada de furos perfurados e apresenta a aderência ao projeto conforme os
+**parâmetros atuais do sistema**:
 
-| Parâmetro          | Esperado | Limites            | Tolerância |
-| ------------------ | -------- | ------------------ | ---------- |
-| Ângulo frontal     | 15°      | 12° a 18°          | ±3°        |
-| Δ Azimute          | 0°       | −5° a +5°          | ±5°        |
-| Δ Profundidade (Z) | 0,00 m   | −0,25 m a +0,25 m  | ±0,25 m    |
-| Meta de aderência  | —        | mínimo 80% dos furos | —        |
+| Parâmetro          | Valor                                           |
+| ------------------ | ----------------------------------------------- |
+| Ângulo frontal     | 15° ± 3,2° (faixa 11,8° a 18,2°)                |
+| Δ Azimute          | 0° ± 6,39°                                      |
+| Δ Profundidade (Z) | 0,00 m ± 0,20 m (20 cm)                         |
+| Meta de aderência  | mínimo 80% dos furos                            |
 
 ## Publicação
 - Deploy via GitHub Pages (branch `main`, raiz).
