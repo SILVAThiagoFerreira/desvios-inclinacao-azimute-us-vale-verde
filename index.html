@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inclinação, Azimute e Profundidade · US Vale Verde</title>
+  <meta name="description" content="Análise de desvios de inclinação, azimute e profundidade dos furos de perfuração — US Vale Verde.">
+  <link rel="preconnect" href="https://docs.google.com">
+  <link rel="stylesheet" href="./styles.css?v=1">
+</head>
+<body>
+  <header class="topbar">
+    <span class="topbar__title">Desvios de Perfuração</span>
+    <img class="topbar__logo" src="./assets/enaex-logo-white.png" alt="ENAEX">
+  </header>
+
+  <main class="page">
+    <section class="page-head">
+      <div class="page-head__title">
+        <p class="eyebrow">ANÁLISE DE DESVIOS · INCLINAÇÃO · AZIMUTE · PROFUNDIDADE</p>
+        <h1>Aderência da Perfuração ao Projeto</h1>
+      </div>
+      <div class="filters">
+        <label class="filter filter--wide">
+          <span>PLANO</span>
+          <select id="filter-plan"></select>
+        </label>
+        <button id="filter-reset" type="button" class="filter-reset">Limpar</button>
+      </div>
+    </section>
+
+    <p class="status" id="status" aria-live="polite">
+      <span class="status__dot" id="status-dot"></span>
+      <span id="status-text">Carregando…</span>
+      <span class="status__spacer"></span>
+      <span class="status__time" id="last-update"></span>
+    </p>
+
+    <div class="active-filters" id="active-filters" style="display:none"></div>
+
+    <section class="control-panel" aria-label="Parâmetros de controle">
+      <p class="control-panel__title">Parâmetros objetivos de controle</p>
+      <div class="control-panel__grid">
+        <div class="control">
+          <p class="control__k">Ângulo frontal</p>
+          <p class="control__v">15,00°</p>
+          <p class="control__s">Limites 12° a 18° · tolerância ±3°</p>
+        </div>
+        <div class="control">
+          <p class="control__k">Δ Azimute</p>
+          <p class="control__v">0,00°</p>
+          <p class="control__s">Limites −5° a +5° · tolerância ±5°</p>
+        </div>
+        <div class="control">
+          <p class="control__k">Δ Profundidade (Z)</p>
+          <p class="control__v">0,00 m</p>
+          <p class="control__s">Limites −0,25 m a +0,25 m · tolerância ±0,25 m</p>
+        </div>
+        <div class="control">
+          <p class="control__k">Meta de aderência</p>
+          <p class="control__v">80,0%</p>
+          <p class="control__s">Mínimo de furos dentro dos limites</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="kpis" id="kpis">
+      <div class="kpi">
+        <p class="kpi__label">FUROS ANALISADOS</p>
+        <p class="kpi__value" id="kpi-count">—</p>
+        <p class="kpi__sub" id="kpi-count-hint">&nbsp;</p>
+      </div>
+      <div class="kpi" id="kpi-angle-card">
+        <p class="kpi__label">ADERÊNCIA ÂNGULO</p>
+        <p class="kpi__value" id="kpi-angle">—</p>
+        <p class="kpi__sub" id="kpi-angle-hint">Dentro de 12° – 18°</p>
+      </div>
+      <div class="kpi" id="kpi-az-card">
+        <p class="kpi__label">ADERÊNCIA AZIMUTE</p>
+        <p class="kpi__value" id="kpi-az">—</p>
+        <p class="kpi__sub" id="kpi-az-hint">|ΔAz| ≤ 5°</p>
+      </div>
+      <div class="kpi" id="kpi-z-card">
+        <p class="kpi__label">ADERÊNCIA Z</p>
+        <p class="kpi__value" id="kpi-z">—</p>
+        <p class="kpi__sub" id="kpi-z-hint">|ΔProf| ≤ 0,25 m</p>
+      </div>
+    </section>
+
+    <section class="chart-stack">
+      <div class="chart-block">
+        <div class="chart-block__head">
+          <h2>Ângulo frontal por furo</h2>
+          <p>Inclinação executada de cada furo em relação à vertical · linhas: limites 12° e 18°</p>
+        </div>
+        <div class="chart-block__body chart-block__body--tall"><canvas id="chart-angle"></canvas></div>
+      </div>
+
+      <div class="chart-block">
+        <div class="chart-block__head">
+          <h2>Direção dos furos — Δ Azimute × Δ Profundidade</h2>
+          <p>Cada ponto é um furo · retângulo interno = zona de aderência (±5° e ±0,25 m)</p>
+        </div>
+        <div class="chart-block__body chart-block__body--vf"><canvas id="chart-direction"></canvas></div>
+      </div>
+
+      <div class="chart-row">
+        <div class="chart-block chart-block--half">
+          <div class="chart-block__head">
+            <h2>Δ Azimute por furo</h2>
+            <p>Desvio angular em planta (executado − planejado)</p>
+          </div>
+          <div class="chart-block__body chart-block__body--tall"><canvas id="chart-az"></canvas></div>
+        </div>
+        <div class="chart-block chart-block--half">
+          <div class="chart-block__head">
+            <h2>Δ Profundidade por furo</h2>
+            <p>Executado − planejado (m)</p>
+          </div>
+          <div class="chart-block__body chart-block__body--tall"><canvas id="chart-depth"></canvas></div>
+        </div>
+      </div>
+
+      <div class="chart-row">
+        <div class="chart-block chart-block--half">
+          <div class="chart-block__head">
+            <h2>Aderência por Plano</h2>
+            <p>% de furos dentro dos limites — ângulo, azimute e Z</p>
+          </div>
+          <div class="chart-block__body chart-block__body--tall"><canvas id="chart-by-plan"></canvas></div>
+        </div>
+        <div class="chart-block chart-block--half">
+          <div class="chart-block__head">
+            <h2>Distribuição de Δ Azimute</h2>
+            <p>Histograma dos desvios angulares em planta</p>
+          </div>
+          <div class="chart-block__body chart-block__body--tall"><canvas id="chart-hist-az"></canvas></div>
+        </div>
+      </div>
+
+      <div class="chart-row">
+        <div class="chart-block chart-block--half">
+          <div class="chart-block__head">
+            <h2>Distribuição de Δ Profundidade</h2>
+            <p>Histograma dos desvios de profundidade (m)</p>
+          </div>
+          <div class="chart-block__body chart-block__body--tall"><canvas id="chart-hist-depth"></canvas></div>
+        </div>
+        <div class="chart-block chart-block--half">
+          <div class="chart-block__head">
+            <h2>Distribuição do Ângulo frontal</h2>
+            <p>Histograma da inclinação executada (°)</p>
+          </div>
+          <div class="chart-block__body chart-block__body--tall"><canvas id="chart-hist-angle"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <p class="source-note">
+      <strong>Fonte:</strong> planilha consolidada de furos perfurados da US Vale Verde, lida em tempo real.
+      <strong>Base de cálculo:</strong> ângulo frontal = inclinação executada em relação à vertical; Δ Azimute = azimute executado − azimute planejado; Δ Profundidade = profundidade executada − planejada.
+      <strong>Parâmetros de controle</strong> conforme ferramenta ANALISE DE DESVIOS DE INCLINAÇÃO E AZIMUTE (OpenBlast):
+      ângulo 12° a 18° (esperado 15°, tol. ±3°), Δ Azimute ±5° (esperado 0°), Δ Profundidade ±0,25 m (esperado 0,00 m), meta de aderência 80%.
+      Furos sem base geométrica em planta são desconsiderados apenas para o cálculo direcional.
+    </p>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="./app.js?v=1"></script>
+</body>
+</html>
