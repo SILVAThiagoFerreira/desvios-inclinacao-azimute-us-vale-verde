@@ -146,6 +146,9 @@ function buildRecords(table) {
     okAngle: g("ANGULO DENTRO DO LIMITE"),
     okAz: g("AZIMUTE DENTRO DO LIMITE"),
     okZ: g("Z DENTRO DO LIMITE"),
+    ano: g("ANO"),
+    mes: g("MES"),
+    data: g("DATA"),
   };
 
   const recs = [];
@@ -162,6 +165,14 @@ function buildRecords(table) {
     const id = num(f.id);
     if (id == null) continue;
 
+    let ano = num(f.ano);
+    let mes = num(f.mes);
+    const dt = parseDateCell(cell(f.data));
+    if (dt) {
+      if (ano == null) ano = dt.getFullYear();
+      if (mes == null) mes = dt.getMonth() + 1;
+    }
+
     recs.push({
       plano: String(plano).trim(),
       id,
@@ -172,31 +183,103 @@ function buildRecords(table) {
       depthPlan: num(f.depthPlan),
       depthExec: num(f.depthExec),
       depthDelta: num(f.depthDelta),
+      ano: ano != null ? Math.round(ano) : null,
+      mes: mes != null ? Math.round(mes) : null,
+      data: dt,
     });
   }
   return recs;
 }
 
+const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+
+/* Aceita "Date(2026,4,22)" (gviz JSON, mês 0-based) e "22/05/2026" (CSV, mês 1-based). */
+function parseDateCell(v) {
+  if (v == null || v === "") return null;
+  const s = String(v);
+  const gm = s.match(/Date\((\d+),(\d+),(\d+)(?:,(\d+),(\d+),(\d+))?/);
+  if (gm) {
+    const dt = new Date(+gm[1], +gm[2], +gm[3], gm[4] ? +gm[4] : 0, gm[5] ? +gm[5] : 0, gm[6] ? +gm[6] : 0);
+    return isNaN(dt.getTime()) ? null : dt;
+  }
+  const br = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+  if (br) {
+    const yr = +br[3] < 100 ? 2000 + +br[3] : +br[3];
+    const dt = new Date(yr, +br[2] - 1, +br[1]);
+    return isNaN(dt.getTime()) ? null : dt;
+  }
+  const iso = new Date(s);
+  return isNaN(iso.getTime()) ? null : iso;
+}
+
 /* ===================== Filtros ===================== */
-function populateFilters() {
-  const planos = [...new Set(RECORDS.map((r) => r.plano).filter(Boolean))]
-    .sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
+function refreshDependentOptions() {
+  const ySel = document.getElementById("filter-year");
+  const mSel = document.getElementById("filter-month");
   const pSel = document.getElementById("filter-plan");
+  const yVal = ySel.value, mVal = mSel.value, pVal = pSel.value;
+
+  // Considera o filtro de ano/mês para restringir os planos disponíveis, e vice-versa.
+  const byAll = (r) =>
+    (!yVal || String(r.ano) === yVal) &&
+    (!mVal || String(r.mes) === mVal) &&
+    (!pVal || r.plano === pVal);
+
+  const years = [...new Set(RECORDS
+    .filter((r) => (!mVal || String(r.mes) === mVal) && (!pVal || r.plano === pVal))
+    .map((r) => r.ano).filter((v) => v != null))].sort((a, b) => a - b);
+  const months = [...new Set(RECORDS
+    .filter((r) => (!yVal || String(r.ano) === yVal) && (!pVal || r.plano === pVal))
+    .map((r) => r.mes).filter((v) => v != null))].sort((a, b) => a - b);
+  const planos = [...new Set(RECORDS
+    .filter((r) => (!yVal || String(r.ano) === yVal) && (!mVal || String(r.mes) === mVal))
+    .map((r) => r.plano).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
+
+  ySel.innerHTML = `<option value="">Todos os anos</option>` +
+    years.map((y) => `<option value="${y}">${y}</option>`).join("");
+  ySel.value = years.map(String).includes(yVal) ? yVal : "";
+
+  mSel.innerHTML = `<option value="">Todos os meses</option>` +
+    months.map((m) => `<option value="${m}">${MESES[m - 1] || m}</option>`).join("");
+  mSel.value = months.map(String).includes(mVal) ? mVal : "";
+
   pSel.innerHTML = `<option value="">Todos os planos</option>` +
     planos.map((p) => `<option value="${escapeAttr(p)}">${escapeText(p)}</option>`).join("");
-  pSel.onchange = render;
+  pSel.value = planos.includes(pVal) ? pVal : "";
+}
+
+function populateFilters() {
+  refreshDependentOptions();
+  ["filter-year", "filter-month", "filter-plan"].forEach((id) => {
+    document.getElementById(id).onchange = () => {
+      refreshDependentOptions();
+      render();
+    };
+  });
   document.getElementById("filter-reset").onclick = () => {
-    pSel.value = "";
+    ["filter-year", "filter-month", "filter-plan"].forEach((id) => (document.getElementById(id).value = ""));
+    refreshDependentOptions();
     render();
   };
 }
 
 function filtered() {
+  const y = document.getElementById("filter-year").value;
+  const mo = document.getElementById("filter-month").value;
   const p = document.getElementById("filter-plan").value;
-  return RECORDS.filter((r) => !p || r.plano === p);
+  return RECORDS.filter((r) =>
+    (!y || String(r.ano) === y) &&
+    (!mo || String(r.mes) === mo) &&
+    (!p || r.plano === p)
+  );
 }
 
-const FILTER_DEFS = [{ id: "filter-plan", label: "Plano" }];
+const FILTER_DEFS = [
+  { id: "filter-year", label: "Ano" },
+  { id: "filter-month", label: "Mês", name: (v) => MESES[+v - 1] || v },
+  { id: "filter-plan", label: "Plano" },
+];
 
 function updateActiveFilters() {
   const box = document.getElementById("active-filters");
@@ -204,9 +287,10 @@ function updateActiveFilters() {
   FILTER_DEFS.forEach((fd) => {
     const sel = document.getElementById(fd.id);
     if (sel && sel.value) {
+      const display = fd.name ? fd.name(sel.value) : sel.value;
       chips.push(
         `<button class="chip" data-id="${fd.id}" type="button">` +
-        `<span class="chip__k">${fd.label}:</span> <span class="chip__v">${escapeText(sel.value)}</span>` +
+        `<span class="chip__k">${fd.label}:</span> <span class="chip__v">${escapeText(display)}</span>` +
         `<span class="chip__x" aria-hidden="true">×</span></button>`
       );
     }
@@ -216,6 +300,7 @@ function updateActiveFilters() {
   box.querySelectorAll(".chip").forEach((el) => {
     el.onclick = () => {
       document.getElementById(el.dataset.id).value = "";
+      refreshDependentOptions();
       render();
     };
   });
@@ -278,7 +363,7 @@ function render() {
   drawDirection(data);
   drawAzByHole(data);
   drawDepthByHole(data);
-  drawByPlan();
+  drawByPlan(data);
   drawHist("chart-hist-az", data.map((r) => r.azDelta).filter((v) => v != null), {
     unit: "°", limit: LIMITS.azimuth, bins: 20,
   });
@@ -547,10 +632,10 @@ function drawDepthByHole(data) {
 }
 
 /* --- 5. Aderência por plano (barras agrupadas) --- */
-function drawByPlan() {
+function drawByPlan(data) {
   destroy("byPlan");
   const groups = {};
-  RECORDS.forEach((r) => {
+  (data || RECORDS).forEach((r) => {
     (groups[r.plano] ||= []).push(r);
   });
   const planos = Object.keys(groups).sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
@@ -701,10 +786,13 @@ function exportToXlsx() {
   const withinAz = (v) => v != null && Math.abs(v) <= LIMITS.azimuth;
   const withinZ = (v) => v != null && Math.abs(v) <= LIMITS.depth;
 
+  const fmtDate = (d) => (d instanceof Date && !isNaN(d))
+    ? `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`
+    : "";
   const rows = data.map((r) => ({
-    "Ano": ano,
-    "Mês": mes,
-    "Data": dataStr,
+    "Ano": r.ano ?? "",
+    "Mês": r.mes ?? "",
+    "Data": fmtDate(r.data),
     "Plano": r.plano,
     "ID": r.id,
     "Ângulo frontal (°)": r.angle,
