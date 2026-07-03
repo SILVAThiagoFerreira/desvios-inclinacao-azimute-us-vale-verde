@@ -173,6 +173,15 @@ function buildRecords(table) {
       if (mes == null) mes = dt.getMonth() + 1;
     }
 
+    // Regra atual: mantém somente registros de nov/2025 em diante,
+    // pulando nov/2026. Alterar aqui se a janela mudar.
+    if (ano == null || mes == null) continue;
+    const ymKey = ano * 12 + (mes - 1);
+    const MIN_YM = 2025 * 12 + (11 - 1);  // nov/2025
+    const SKIP_YM = 2026 * 12 + (11 - 1); // nov/2026
+    if (ymKey < MIN_YM) continue;
+    if (ymKey === SKIP_YM) continue;
+
     recs.push({
       plano: String(plano).trim(),
       id,
