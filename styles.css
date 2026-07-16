@@ -61,6 +61,7 @@ body {
   color: #ffffff;
   letter-spacing: 0.02em;
   white-space: nowrap;
+  min-width: 0;
 }
 .topbar__unit {
   margin-left: auto;
@@ -324,7 +325,7 @@ body {
   color: var(--muted);
 }
 .chart-block__body { position: relative; min-height: 220px; }
-.chart-block__body--tall { min-height: 300px; }
+.chart-block__body--tall { min-height: clamp(260px, 24vw, 300px); }
 .chart-block__eyebrow {
   margin: 0 0 4px;
   font-size: 9.5px;
@@ -334,16 +335,16 @@ body {
   color: var(--muted);
 }
 .chart-block__body--map {
-  min-height: 460px;
+  min-height: clamp(330px, 36vw, 460px);
   border: 1px solid var(--rule);
   border-radius: var(--radius);
   background: #fbfbfc;
-  padding: 12px;
+  padding: 42px 12px 12px;
   position: relative;
 }
 .chart-block__body--map svg {
   width: 100%;
-  height: 440px;
+  height: clamp(270px, 34vw, 410px);
   display: block;
 }
 .map-legend {
@@ -411,7 +412,7 @@ body {
 .chart-block__body--vf {
   max-width: 780px;
   margin: 0 auto;
-  min-height: 520px;
+  min-height: clamp(360px, 40vw, 520px);
 }
 
 .chart-row {
@@ -443,8 +444,25 @@ body {
 }
 @media (max-width: 560px) {
   .topbar { padding: 0 16px; }
+  .topbar__title { position: static; transform: none; flex: 1; margin-left: 12px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+  .topbar__unit { display: none; }
   .page { width: calc(100% - 24px); padding-top: 16px; }
-  .kpis, .control-panel__grid { grid-template-columns: 1fr 1fr; gap: 8px; }
-  .filters { gap: 6px; }
-  .filter select { min-width: 0; }
+  .page-head { gap: 12px; }
+  .filters { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .filter { min-width: 0; }
+  .filter--wide { grid-column: 1 / -1; }
+  .filter select, .filter--wide select { width: 100%; min-width: 0; }
+  .filter-reset, #export-xlsx { align-self: stretch; }
+  .control-panel__grid { grid-template-columns: 1fr; gap: 12px; }
+  .kpis { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .chart-block, .chart-block--half { padding: 14px 12px 12px; }
+  .chart-block__body--tall { min-height: 260px; }
+  .chart-block__body--vf { min-height: 340px; }
+  .chart-block__body--map { min-height: 310px; padding: 42px 8px 8px; }
+  .chart-block__body--map svg { height: 250px; }
+  .map-legend { top: 12px; left: 12px; right: 12px; gap: 8px 12px; font-size: 9px; }
+  .source-note { font-size: 11px; }
+}
+@media (max-width: 400px) {
+  .kpis { grid-template-columns: 1fr; }
 }

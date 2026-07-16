@@ -448,6 +448,39 @@ const toleranceBoxPlugin = {
 };
 Chart.register(toleranceBoxPlugin);
 
+/* Rótulos discretos e centralizados para barras com espaço legível. */
+const valueLabelsPlugin = {
+  id: "valueLabels",
+  afterDatasetsDraw(chart, _args, opts) {
+    if (!opts || opts.display === false) return;
+    const { ctx } = chart;
+    const fontSize = opts.fontSize || 10;
+    ctx.save();
+    ctx.font = `700 ${fontSize}px "Segoe UI", Arial, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    chart.data.datasets.forEach((dataset, datasetIndex) => {
+      const meta = chart.getDatasetMeta(datasetIndex);
+      if (meta.hidden) return;
+      meta.data.forEach((bar, index) => {
+        const value = dataset.data[index];
+        if (value == null || !isFinite(value)) return;
+        const props = bar.getProps(["x", "y", "base", "width"], true);
+        const height = Math.abs(props.base - props.y);
+        if (props.width < 13 || height < fontSize + 8) return;
+        const label = opts.formatter ? opts.formatter(value, dataset, index) : String(value);
+        const textColor = typeof opts.textColor === "function"
+          ? opts.textColor(value, dataset, index, bar)
+          : opts.textColor;
+        ctx.fillStyle = textColor || "#ffffff";
+        ctx.fillText(label, props.x, (props.y + props.base) / 2);
+      });
+    });
+    ctx.restore();
+  },
+};
+Chart.register(valueLabelsPlugin);
+
 function destroy(id) {
   if (CHARTS[id]) { CHARTS[id].destroy(); CHARTS[id] = null; }
 }
@@ -671,6 +704,11 @@ function drawByPlan(data) {
       plugins: {
         legend: { position: "top", align: "start", labels: { boxWidth: 10, boxHeight: 10, color: C.text } },
         tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${fmtPct(c.raw)}` } },
+        valueLabels: {
+          display: true,
+          formatter: (value) => fmtPct(value),
+          textColor: (_value, _dataset, index) => index === 2 ? C.ink : "#ffffff",
+        },
         limitLines: { yLines: [LIMITS.meta], color: C.red, dash: [5, 4] },
       },
       scales: {
@@ -739,6 +777,7 @@ function drawHist(canvasId, values, opts = {}) {
       plugins: {
         legend: { display: false },
         tooltip: { callbacks: { label: (c) => `${c.raw} furo(s)`, title: (t) => `Faixa: ${t[0].label}${unit}` } },
+        valueLabels: { display: true, formatter: (value) => fmtInt(value) },
         limitLines: {
           xLines: marks.map((m) => {
             // Chart.js "category" scale uses index; find closest bin center
