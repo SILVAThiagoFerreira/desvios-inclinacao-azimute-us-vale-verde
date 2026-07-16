@@ -419,13 +419,17 @@ body {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+  min-width: 0;
 }
 .chart-block--half {
   background: var(--surface);
   border-radius: var(--radius);
   padding: 18px 22px 14px;
   box-shadow: var(--shadow);
+  min-width: 0;
+  overflow: hidden;
 }
+.chart-row > * { min-width: 0; }
 
 /* ---------- Source note ---------- */
 .source-note {
@@ -456,6 +460,7 @@ body {
   .control-panel__grid { grid-template-columns: 1fr; gap: 12px; }
   .kpis { grid-template-columns: 1fr 1fr; gap: 8px; }
   .chart-block, .chart-block--half { padding: 14px 12px 12px; }
+  .chart-block canvas { max-width: 100%; }
   .chart-block__body--tall { min-height: 260px; }
   .chart-block__body--vf { min-height: 340px; }
   .chart-block__body--map { min-height: 310px; padding: 42px 8px 8px; }
