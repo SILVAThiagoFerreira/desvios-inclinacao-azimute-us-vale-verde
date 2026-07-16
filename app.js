@@ -454,9 +454,11 @@ const valueLabelsPlugin = {
   afterDatasetsDraw(chart, _args, opts) {
     if (!opts || opts.display === false) return;
     const { ctx } = chart;
-    const fontSize = opts.fontSize || 10;
+    const baseFontSize = opts.fontSize || 10;
+    const minFontSize = opts.minFontSize || 7;
+    const horizontalPadding = opts.horizontalPadding || 2;
+    const verticalPadding = opts.verticalPadding || 2;
     ctx.save();
-    ctx.font = `700 ${fontSize}px "Segoe UI", Arial, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     chart.data.datasets.forEach((dataset, datasetIndex) => {
@@ -466,14 +468,39 @@ const valueLabelsPlugin = {
         const value = dataset.data[index];
         if (value == null || !isFinite(value)) return;
         const props = bar.getProps(["x", "y", "base", "width"], true);
-        const height = Math.abs(props.base - props.y);
-        if (props.width < 13 || height < fontSize + 8) return;
-        const label = opts.formatter ? opts.formatter(value, dataset, index) : String(value);
+        const left = props.x - props.width / 2;
+        const top = Math.min(props.y, props.base);
+        const barWidth = Math.max(0, props.width);
+        const barHeight = Math.max(0, Math.abs(props.base - props.y));
+        if (!barWidth || !barHeight) return;
+        let label = opts.formatter ? opts.formatter(value, dataset, index) : String(value);
+        let labelSize = Math.min(baseFontSize, barHeight - verticalPadding * 2);
+        const maxTextWidth = Math.max(0, barWidth - horizontalPadding * 2);
+        while (labelSize >= minFontSize) {
+          ctx.font = `700 ${labelSize}px "Segoe UI", Arial, sans-serif`;
+          if (ctx.measureText(label).width <= maxTextWidth) break;
+          labelSize -= 0.5;
+        }
+        if (labelSize < minFontSize && opts.compactFormatter) {
+          label = opts.compactFormatter(value, dataset, index);
+          labelSize = Math.max(6, Math.min(minFontSize, barHeight - verticalPadding * 2));
+          while (labelSize >= 6) {
+            ctx.font = `700 ${labelSize}px "Segoe UI", Arial, sans-serif`;
+            if (ctx.measureText(label).width <= maxTextWidth) break;
+            labelSize -= 0.5;
+          }
+        }
+        if (labelSize < 6 || ctx.measureText(label).width > maxTextWidth) return;
         const textColor = typeof opts.textColor === "function"
-          ? opts.textColor(value, dataset, index, bar)
+          ? opts.textColor(value, dataset, index, bar, datasetIndex)
           : opts.textColor;
         ctx.fillStyle = textColor || "#ffffff";
-        ctx.fillText(label, props.x, (props.y + props.base) / 2);
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(left, top, barWidth, barHeight);
+        ctx.clip();
+        ctx.fillText(label, props.x, top + barHeight / 2);
+        ctx.restore();
       });
     });
     ctx.restore();
@@ -707,7 +734,9 @@ function drawByPlan(data) {
         valueLabels: {
           display: true,
           formatter: (value) => fmtPct(value),
-          textColor: (_value, _dataset, index) => index === 2 ? C.ink : "#ffffff",
+          compactFormatter: (value) => `${Math.round(value)}%`,
+          minFontSize: 7,
+          textColor: (_value, _dataset, _index, _bar, datasetIndex) => datasetIndex === 2 ? C.ink : "#ffffff",
         },
         limitLines: { yLines: [LIMITS.meta], color: C.red, dash: [5, 4] },
       },
@@ -777,7 +806,7 @@ function drawHist(canvasId, values, opts = {}) {
       plugins: {
         legend: { display: false },
         tooltip: { callbacks: { label: (c) => `${c.raw} furo(s)`, title: (t) => `Faixa: ${t[0].label}${unit}` } },
-        valueLabels: { display: true, formatter: (value) => fmtInt(value) },
+        valueLabels: { display: true, formatter: (value) => fmtInt(value), minFontSize: 7 },
         limitLines: {
           xLines: marks.map((m) => {
             // Chart.js "category" scale uses index; find closest bin center
