@@ -930,11 +930,16 @@ async function exportToXlsx(btn = document.getElementById("export-xlsx")) {
   const chartsSheet = excelWb.addWorksheet("Gráficos");
   chartsSheet.getCell("A1").value = "Gráficos do intervalo selecionado";
   chartsSheet.getCell("A2").value = `Furos exportados: ${data.length} · Filtros: ${getActiveFilterLabel()}`;
+  chartsSheet.getCell("A3").value = "Os oito gráficos analíticos abaixo usam o mesmo filtro da tela. O mapa de execução depende do DXF do plano e permanece no dashboard.";
   chartsSheet.getCell("A1").font = { bold: true, size: 16, color: { argb: "FF38424B" } };
   chartsSheet.getCell("A2").font = { italic: true, color: { argb: "FF6C747B" } };
+  chartsSheet.getCell("A3").font = { italic: true, color: { argb: "FF6C747B" } };
   chartsSheet.getColumn(1).width = 24;
+  const chartDataSheet = excelWb.addWorksheet("Dados gráficos");
+  chartDataSheet.state = "hidden";
+  const chartRefs = writeExcelChartData(chartDataSheet, data);
   const buffer = await excelWb.xlsx.writeBuffer();
-  const nativeBuffer = await addNativeExcelCharts(buffer, data.length + 1);
+  const nativeBuffer = await addNativeExcelChartsV2(buffer, chartRefs);
   const blob = new Blob([nativeBuffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
@@ -992,6 +997,105 @@ async function addNativeExcelCharts(buffer, lastRow) {
   return zip.generateAsync({ type: "arraybuffer" });
 }
 
+function histogramBuckets(values, bins, min, max, digits) {
+  if (!values.length) return [];
+  const observedMin = Math.min(...values);
+  const observedMax = Math.max(...values);
+  if (min == null) min = observedMin;
+  if (max == null) max = observedMax;
+  if (min === max) { min -= 0.5; max += 0.5; }
+  const step = (max - min) / bins;
+  const counts = new Array(bins).fill(0);
+  values.forEach((value) => {
+    let index = Math.floor((value - min) / step);
+    if (index < 0) index = 0;
+    if (index >= bins) index = bins - 1;
+    counts[index] += 1;
+  });
+  return counts.map((count, index) => [fmtNum(min + step * (index + 0.5), digits), count]);
+}
+
+function writeExcelChartData(sheet, data) {
+  sheet.getRow(1).values = ["Plano", "ID", "Ângulo frontal (°)", "Δ Azimute (°)", "Δ Profundidade (m)"];
+  data.forEach((r) => sheet.addRow([r.plano, r.id, r.angle, r.azDelta, r.depthDelta]));
+  const holeStart = 2;
+  const holeEnd = data.length + 1;
+  const planStart = holeEnd + 3;
+  sheet.getRow(planStart - 1).values = [null, null, null, null, null, null, "Plano", "Aderência Ângulo (%)", "Aderência Azimute (%)", "Aderência Z (%)"];
+  const groups = {};
+  data.forEach((r) => (groups[r.plano] ||= []).push(r));
+  const planos = Object.keys(groups).sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
+  const finiteOrNull = (value) => isFinite(value) ? value : null;
+  planos.forEach((plano, index) => {
+    const m = computeMetrics(groups[plano]);
+    sheet.getRow(planStart + index).values = [null, null, null, null, null, null, plano, finiteOrNull(m.anglePct), finiteOrNull(m.azPct), finiteOrNull(m.zPct)];
+  });
+  const planEnd = planStart + Math.max(planos.length - 1, 0);
+  const azValues = data.map((r) => r.azDelta).filter((v) => v != null);
+  const zValues = data.map((r) => r.depthDelta).filter((v) => v != null);
+  const angleValues = data.map((r) => r.angle).filter((v) => v != null);
+  const azExtent = Math.max(...azValues.map((v) => Math.abs(v)), 1) * 1.05;
+  const zExtent = Math.max(...zValues.map((v) => Math.abs(v)), 0.1) * 1.05;
+  const azHist = histogramBuckets(azValues, 20, -azExtent, azExtent, 1);
+  const zHist = histogramBuckets(zValues, 20, -zExtent, zExtent, 2);
+  const angleHist = histogramBuckets(angleValues, 18, 0, 30, 1);
+  const histStart = planEnd + 3;
+  sheet.getRow(histStart - 1).values = [null, null, null, null, null, null, null, null, null, null, null, "Faixa Δ Azimute", "Nº de furos", null, "Faixa Δ Profundidade", "Nº de furos", null, "Faixa Ângulo", "Nº de furos"];
+  const maxHistRows = Math.max(azHist.length, zHist.length, angleHist.length);
+  for (let i = 0; i < maxHistRows; i++) {
+    sheet.getRow(histStart + i).values = [null, null, null, null, null, null, null, null, null, null, null, azHist[i]?.[0] ?? null, azHist[i]?.[1] ?? null, null, zHist[i]?.[0] ?? null, zHist[i]?.[1] ?? null, null, angleHist[i]?.[0] ?? null, angleHist[i]?.[1] ?? null];
+  }
+  const histEnd = histStart + Math.max(maxHistRows - 1, 0);
+  return { holeStart, holeEnd, planStart, planEnd, histStart, histEnd };
+}
+
+async function addNativeExcelChartsV2(buffer, refs) {
+  const zip = await JSZip.loadAsync(buffer);
+  const ns = "http://schemas.openxmlformats.org/drawingml/2006/main";
+  const cns = "http://schemas.openxmlformats.org/drawingml/2006/chart";
+  const dataSheet = "Dados gráficos";
+  const xmlEscape = (value) => String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const ref = (column, start, end) => `'${dataSheet}'!$${column}$${start}:$${column}$${end}`;
+  const defs = [
+    { title: "Ângulo frontal por furo", type: "line", cat: ["B", refs.holeStart, refs.holeEnd], series: [["Ângulo executado", "C", refs.holeStart, refs.holeEnd]], color: "FF2E86AB" },
+    { title: "Δ Azimute por furo", type: "line", cat: ["B", refs.holeStart, refs.holeEnd], series: [["Δ Azimute", "D", refs.holeStart, refs.holeEnd]], color: "FFB5651D" },
+    { title: "Δ Profundidade por furo", type: "line", cat: ["B", refs.holeStart, refs.holeEnd], series: [["Δ Profundidade", "E", refs.holeStart, refs.holeEnd]], color: "FF6A994E" },
+    { title: "Direção / aderência", type: "scatter", x: ["D", refs.holeStart, refs.holeEnd], series: [["Furos", "E", refs.holeStart, refs.holeEnd]], color: "FF7B2CBF" },
+    { title: "Aderência por plano", type: "bar", cat: ["G", refs.planStart, refs.planEnd], series: [["Ângulo", "H", refs.planStart, refs.planEnd], ["Azimute", "I", refs.planStart, refs.planEnd], ["Profundidade (Z)", "J", refs.planStart, refs.planEnd]], color: "FF264653" },
+    { title: "Distribuição do azimute", type: "bar", cat: ["L", refs.histStart, refs.histEnd], series: [["Nº de furos", "M", refs.histStart, refs.histEnd]], color: "FFE76F51" },
+    { title: "Distribuição da profundidade", type: "bar", cat: ["O", refs.histStart, refs.histEnd], series: [["Nº de furos", "P", refs.histStart, refs.histEnd]], color: "FF2A9D8F" },
+    { title: "Distribuição do ângulo", type: "bar", cat: ["R", refs.histStart, refs.histEnd], series: [["Nº de furos", "S", refs.histStart, refs.histEnd]], color: "FFE9C46A" },
+  ];
+  const chartXml = (def) => {
+    const kind = def.type === "line" ? "lineChart" : def.type === "scatter" ? "scatterChart" : "barChart";
+    const plot = def.type === "scatter" ? `<c:scatterStyle val="lineMarker"/>` : def.type === "bar" ? `<c:barDir val="col"/><c:grouping val="clustered"/>` : `<c:grouping val="standard"/>`;
+    const series = def.series.map(([name, valueColumn, start, end], index) => {
+      const dataRef = ref(valueColumn, start, end);
+      const dimensions = def.type === "scatter"
+        ? `<c:xVal><c:numRef><c:f>${ref(def.x[0], def.x[1], def.x[2])}</c:f></c:numRef></c:xVal><c:yVal><c:numRef><c:f>${dataRef}</c:f></c:numRef></c:yVal>`
+        : `<c:cat><c:strRef><c:f>${ref(def.cat[0], def.cat[1], def.cat[2])}</c:f></c:strRef></c:cat><c:val><c:numRef><c:f>${dataRef}</c:f></c:numRef></c:val>`;
+      return `<c:ser><c:idx val="${index}"/><c:order val="${index}"/><c:tx><c:v>${xmlEscape(name)}</c:v></c:tx>${dimensions}<c:spPr><a:solidFill><a:srgbClr val="${def.color.slice(2)}"/></a:solidFill><a:ln><a:solidFill><a:srgbClr val="${def.color.slice(2)}"/></a:solidFill></a:ln></c:spPr></c:ser>`;
+    }).join("");
+    const axes = `<c:axId val="10"/><c:axId val="11"/>`;
+    const axisDefinitions = def.type === "scatter"
+      ? `<c:valAx><c:axId val="10"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:axPos val="b"/></c:valAx><c:valAx><c:axId val="11"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:axPos val="l"/></c:valAx>`
+      : `<c:catAx><c:axId val="10"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:axPos val="b"/></c:catAx><c:valAx><c:axId val="11"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:axPos val="l"/></c:valAx>`;
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><c:chartSpace xmlns:c="${cns}" xmlns:a="${ns}"><c:chart><c:autoTitleDeleted val="0"/><c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="pt-BR" sz="1400"/><a:t>${xmlEscape(def.title)}</a:t></a:r></a:p></c:rich></c:tx></c:title><c:plotArea><c:layout/><c:${kind}>${plot}<c:varyColors val="0"/>${series}${axes}</c:${kind}>${axisDefinitions}</c:plotArea><c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart></c:chartSpace>`;
+  };
+  const anchors = defs.map((_, i) => `<xdr:twoCellAnchor><xdr:from><xdr:col>${(i % 2) * 9}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${Math.floor(i / 2) * 18 + 4}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:to><xdr:col>${(i % 2) * 9 + 8}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${Math.floor(i / 2) * 18 + 18}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to><xdr:graphicFrame><xdr:nvGraphicFramePr><xdr:cNvPr id="${i + 2}" name="Gráfico ${i + 1}"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="${cns}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId${i + 1}"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor>`).join("");
+  zip.file("xl/drawings/drawing1.xml", `<?xml version="1.0" encoding="UTF-8"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="${ns}">${anchors}</xdr:wsDr>`);
+  zip.file("xl/drawings/_rels/drawing1.xml.rels", `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${defs.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart${i + 1}.xml"/>`).join("")}</Relationships>`);
+  defs.forEach((def, i) => zip.file(`xl/charts/chart${i + 1}.xml`, chartXml(def)));
+  zip.file("xl/worksheets/_rels/sheet3.xml.rels", `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>`);
+  let sheet = await zip.file("xl/worksheets/sheet3.xml").async("string");
+  sheet = sheet.replace("</worksheet>", `<drawing xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId1"/></worksheet>`);
+  zip.file("xl/worksheets/sheet3.xml", sheet);
+  let types = await zip.file("[Content_Types].xml").async("string");
+  types = types.replace("</Types>", defs.map((_, i) => `<Override PartName="/xl/charts/chart${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>`).join("") + `<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>`);
+  zip.file("[Content_Types].xml", types);
+  return zip.generateAsync({ type: "arraybuffer" });
+}
+
 function getActiveFilterLabel() {
   return FILTER_DEFS.map((def) => {
     const value = document.getElementById(def.id)?.value;
@@ -1000,18 +1104,34 @@ function getActiveFilterLabel() {
 }
 
 /* ===================== Mapa de execução (DXF) ===================== */
-/* Convenção: cada plano tem um arquivo DXF em ./data/<PLANO>.dxf
-   (mesmo nome da coluna Plano na planilha). Adicionar um novo plano
-   à planilha + colocar o DXF na pasta faz o mapa aparecer automaticamente. */
+/* A planilha fornece os dados dos furos; a geometria do mapa vem de um DXF
+   versionado em ./data/<PLANO>.dxf. O manifesto evita 404 para planos que
+   chegaram à planilha antes de o respectivo desenho ser disponibilizado. */
 
 const DXF_CACHE = new Map();   // plano -> Promise<holes | null>
 const DXF_MISS = new Set();    // planos sem DXF (evita re-tentar)
+let DXF_MANIFEST_PROMISE = null;
+
+async function loadDxfManifest() {
+  if (!DXF_MANIFEST_PROMISE) {
+    DXF_MANIFEST_PROMISE = fetch("./data/dxf-manifest.json", { cache: "no-store" })
+      .then((res) => res.ok ? res.json() : null)
+      .then((items) => Array.isArray(items) ? new Set(items.map(String)) : null)
+      .catch(() => null);
+  }
+  return DXF_MANIFEST_PROMISE;
+}
 
 async function fetchDxfHoles(plano) {
   if (DXF_MISS.has(plano)) return null;
   if (DXF_CACHE.has(plano)) return DXF_CACHE.get(plano);
   const promise = (async () => {
     try {
+      const manifest = await loadDxfManifest();
+      if (manifest && !manifest.has(plano)) {
+        DXF_MISS.add(plano);
+        return null;
+      }
       const res = await fetch(`./data/${encodeURIComponent(plano)}.dxf`, { cache: "no-store" });
       if (!res.ok) throw new Error("HTTP " + res.status);
       const txt = await res.text();
@@ -1154,8 +1274,8 @@ async function drawMap() {
   if (!withGeom.length) {
     status.classList.add("is-visible");
     status.textContent = selected
-      ? `Sem DXF disponível para ${selected}.`
-      : "Nenhum DXF disponível para os planos do filtro.";
+      ? `Sem DXF disponível para ${selected}. Os furos da planilha seguem carregados nos indicadores e gráficos; o mapa precisa do desenho do plano.`
+      : "Nenhum DXF disponível para os planos do filtro. Os furos da planilha seguem carregados nos indicadores e gráficos; o mapa precisa do desenho do plano.";
     return;
   }
   status.classList.remove("is-visible");
