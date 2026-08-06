@@ -839,18 +839,22 @@ function drawHist(canvasId, values, opts = {}) {
 function setupExport() {
   const btn = document.getElementById("export-xlsx");
   if (!btn) return;
-  btn.onclick = exportToXlsx;
+  btn.onclick = () => exportToXlsx(btn);
 }
 
-async function exportToXlsx() {
+async function exportToXlsx(btn = document.getElementById("export-xlsx")) {
+  const originalLabel = btn?.textContent || "⤓ Excel";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Gerando Excel…";
+  }
+  try {
   if (typeof XLSX === "undefined" || typeof ExcelJS === "undefined") {
-    alert("Biblioteca de exportação ainda carregando. Aguarde alguns segundos e tente novamente.");
-    return;
+    throw new Error("As bibliotecas de exportação ainda não terminaram de carregar. Atualize a página e tente novamente.");
   }
   const data = filtered();
   if (!data.length) {
-    alert("Nenhum furo no filtro atual para exportar.");
-    return;
+    throw new Error("Nenhum furo no filtro atual para exportar.");
   }
 
   const now = new Date();
@@ -950,6 +954,15 @@ async function exportToXlsx() {
   link.download = `desvios-perfuracao_${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}.xlsx`;
   link.click();
   setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  if (btn) btn.textContent = `Excel pronto · ${data.length} furos`;
+  setTimeout(() => { if (btn) btn.textContent = originalLabel; }, 3500);
+  } catch (error) {
+    console.error("Falha ao exportar Excel", error);
+    alert(`Não foi possível gerar o Excel com os gráficos. ${error.message || "Tente novamente."}`);
+    if (btn) btn.textContent = originalLabel;
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 function getActiveFilterLabel() {
