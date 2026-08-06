@@ -849,7 +849,7 @@ async function exportToXlsx(btn = document.getElementById("export-xlsx")) {
     btn.textContent = "Gerando Excel…";
   }
   try {
-  if (typeof XLSX === "undefined" || typeof ExcelJS === "undefined") {
+  if (typeof XLSX === "undefined" || typeof ExcelJS === "undefined" || typeof JSZip === "undefined") {
     throw new Error("As bibliotecas de exportação ainda não terminaram de carregar. Atualize a página e tente novamente.");
   }
   const data = filtered();
@@ -860,7 +860,9 @@ async function exportToXlsx(btn = document.getElementById("export-xlsx")) {
   const now = new Date();
   const pad = (n) => String(n).padStart(2, "0");
   const dataStr = `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()}`;
-  const ano = now.getFullYear();
+  const selectedYear = document.getElementById("filter-year")?.value || "Todos";
+  const selectedMonth = document.getElementById("filter-month")?.value || "Todos";
+  const ano = selectedYear === "Todos" ? "Todos" : selectedYear;
   const meses = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
   const mes = meses[now.getMonth()];
 
@@ -905,7 +907,7 @@ async function exportToXlsx(btn = document.getElementById("export-xlsx")) {
     ["Relatório de Desvios de Perfuração"],
     ["Gerado em", dataStr],
     ["Ano", ano],
-    ["Mês", mes],
+    ["Mês", selectedMonth === "Todos" ? "Todos" : (meses[Number(selectedMonth) - 1] || selectedMonth)],
     [],
     ["Furos analisados", m.total],
     ["Aderência Ângulo (%)", isFinite(m.anglePct) ? +m.anglePct.toFixed(2) : ""],
@@ -930,25 +932,10 @@ async function exportToXlsx(btn = document.getElementById("export-xlsx")) {
   chartsSheet.getCell("A2").value = `Furos exportados: ${data.length} · Filtros: ${getActiveFilterLabel()}`;
   chartsSheet.getCell("A1").font = { bold: true, size: 16, color: { argb: "FF38424B" } };
   chartsSheet.getCell("A2").font = { italic: true, color: { argb: "FF6C747B" } };
-  const chartDefs = [
-    ["chart-angle", "Ângulo frontal"], ["chart-direction", "Direção / aderência"],
-    ["chart-az", "Desvio de azimute"], ["chart-depth", "Desvio de profundidade"],
-    ["chart-by-plan", "Aderência por plano"], ["chart-hist-az", "Distribuição do azimute"],
-    ["chart-hist-depth", "Distribuição da profundidade"], ["chart-hist-angle", "Distribuição do ângulo"],
-  ];
-  let imageRow = 4;
-  for (const [id, title] of chartDefs) {
-    const canvas = document.getElementById(id);
-    if (!canvas || !canvas.width || !canvas.height) continue;
-    chartsSheet.getCell(`A${imageRow}`).value = title;
-    chartsSheet.getCell(`A${imageRow}`).font = { bold: true, color: { argb: "FF38424B" } };
-    const imageId = excelWb.addImage({ base64: canvas.toDataURL("image/png", 1), extension: "png" });
-    chartsSheet.addImage(imageId, { tl: { col: 0, row: imageRow }, ext: { width: 560, height: 280 } });
-    imageRow += 18;
-  }
   chartsSheet.getColumn(1).width = 24;
   const buffer = await excelWb.xlsx.writeBuffer();
-  const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const nativeBuffer = await addNativeExcelCharts(buffer, data.length + 1);
+  const blob = new Blob([nativeBuffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
   link.download = `desvios-perfuracao_${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}.xlsx`;
@@ -963,6 +950,43 @@ async function exportToXlsx(btn = document.getElementById("export-xlsx")) {
   } finally {
     if (btn) btn.disabled = false;
   }
+}
+
+async function addNativeExcelCharts(buffer, lastRow) {
+  const zip = await JSZip.loadAsync(buffer);
+  const ns = "http://schemas.openxmlformats.org/drawingml/2006/main";
+  const cns = "http://schemas.openxmlformats.org/drawingml/2006/chart";
+  const defs = [
+    ["Ângulo frontal por furo", "line", "E", "F", "FF2E86AB"],
+    ["Δ Azimute por furo", "line", "E", "I", "FFB5651D"],
+    ["Δ Profundidade por furo", "line", "E", "L", "FF6A994E"],
+    ["Direção / aderência", "scatter", "I", "L", "FF7B2CBF"],
+    ["Aderência por plano", "bar", "E", "F", "FF264653"],
+    ["Distribuição do azimute", "bar", "E", "I", "FFE76F51"],
+    ["Distribuição da profundidade", "bar", "E", "L", "FF2A9D8F"],
+    ["Distribuição do ângulo", "bar", "E", "F", "FFE9C46A"],
+  ];
+  const chartXml = (title, type, catCol, valCol, color, idx) => {
+    const series = type === "scatter"
+      ? `<c:xVal><c:numRef><c:f>'Desvios'!$${catCol}$2:$${catCol}$${lastRow}</c:f></c:numRef></c:xVal><c:yVal><c:numRef><c:f>'Desvios'!$${valCol}$2:$${valCol}$${lastRow}</c:f></c:numRef></c:yVal>`
+      : `<c:cat><c:strRef><c:f>'Desvios'!$${catCol}$2:$${catCol}$${lastRow}</c:f></c:strRef></c:cat><c:val><c:numRef><c:f>'Desvios'!$${valCol}$2:$${valCol}$${lastRow}</c:f></c:numRef></c:val>`;
+    const kind = type === "line" ? "lineChart" : type === "scatter" ? "scatterChart" : "barChart";
+    const plot = type === "scatter" ? `<c:scatterStyle val="lineMarker"/>` : type === "bar" ? `<c:barDir val="col"/><c:grouping val="clustered"/>` : `<c:grouping val="standard"/>`;
+    const axes = `<c:axId val="10"/><c:axId val="11"/>${type === "scatter" ? `<c:valAx><c:axId val="10"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:axPos val="b"/></c:valAx><c:valAx><c:axId val="11"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:axPos val="l"/></c:valAx>` : `<c:catAx><c:axId val="10"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:axPos val="b"/></c:catAx><c:valAx><c:axId val="11"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:axPos val="l"/></c:valAx>`}`;
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><c:chartSpace xmlns:c="${cns}" xmlns:a="${ns}"><c:chart><c:autoTitleDeleted val="0"/><c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="pt-BR" sz="1400"/><a:t>${title}</a:t></a:r></a:p></c:rich></c:tx></c:title><c:plotArea><c:layout/><c:${kind}>${plot}<c:varyColors val="0"/><c:ser><c:idx val="${idx}"/><c:order val="${idx}"/><c:tx><c:v>${title}</c:v></c:tx>${series}<c:spPr><a:solidFill><a:srgbClr val="${color.slice(2)}"/></a:solidFill><a:ln><a:solidFill><a:srgbClr val="${color.slice(2)}"/></a:solidFill></a:ln></c:spPr></c:ser></c:${kind}>${axes}</c:plotArea><c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart></c:chartSpace>`;
+  };
+  const anchors = defs.map((d, i) => `<xdr:twoCellAnchor><xdr:from><xdr:col>${(i % 2) * 9}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${Math.floor(i / 2) * 18 + 3}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:to><xdr:col>${(i % 2) * 9 + 8}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${Math.floor(i / 2) * 18 + 17}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to><xdr:graphicFrame><xdr:nvGraphicFramePr><xdr:cNvPr id="${i + 2}" name="Gráfico ${i + 1}"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="${cns}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId${i + 1}"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor>`).join("");
+  zip.file("xl/drawings/drawing1.xml", `<?xml version="1.0" encoding="UTF-8"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="${ns}">${anchors}</xdr:wsDr>`);
+  zip.file("xl/drawings/_rels/drawing1.xml.rels", `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${defs.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart${i + 1}.xml"/>`).join("")}</Relationships>`);
+  defs.forEach((d, i) => zip.file(`xl/charts/chart${i + 1}.xml`, chartXml(...d, i)));
+  zip.file("xl/worksheets/_rels/sheet3.xml.rels", `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>`);
+  let sheet = await zip.file("xl/worksheets/sheet3.xml").async("string");
+  sheet = sheet.replace("</worksheet>", `<drawing xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId1"/></worksheet>`);
+  zip.file("xl/worksheets/sheet3.xml", sheet);
+  let types = await zip.file("[Content_Types].xml").async("string");
+  types = types.replace("</Types>", defs.map((_, i) => `<Override PartName="/xl/charts/chart${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>`).join("") + `<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>`);
+  zip.file("[Content_Types].xml", types);
+  return zip.generateAsync({ type: "arraybuffer" });
 }
 
 function getActiveFilterLabel() {
