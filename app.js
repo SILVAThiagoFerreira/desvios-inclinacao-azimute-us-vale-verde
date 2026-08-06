@@ -842,8 +842,8 @@ function setupExport() {
   btn.onclick = exportToXlsx;
 }
 
-function exportToXlsx() {
-  if (typeof XLSX === "undefined") {
+async function exportToXlsx() {
+  if (typeof XLSX === "undefined" || typeof ExcelJS === "undefined") {
     alert("Biblioteca de exportação ainda carregando. Aguarde alguns segundos e tente novamente.");
     return;
   }
@@ -913,8 +913,50 @@ function exportToXlsx() {
   wsResumo["!cols"] = [{ wch: 28 }, { wch: 20 }];
   XLSX.utils.book_append_sheet(wb, wsResumo, "Resumo");
 
-  const fname = `desvios-perfuracao_${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}.xlsx`;
-  XLSX.writeFile(wb, fname);
+  const excelWb = new ExcelJS.Workbook();
+  const dataSheet = excelWb.addWorksheet("Desvios");
+  dataSheet.addRows(XLSX.utils.sheet_to_json(ws, { header: 1 }));
+  dataSheet.columns.forEach((col) => { col.width = Math.max(14, Math.min(28, String(col.header || "").length + 3)); });
+  const summarySheet = excelWb.addWorksheet("Resumo");
+  summarySheet.addRows(XLSX.utils.sheet_to_json(wsResumo, { header: 1 }));
+  summarySheet.getColumn(1).width = 30;
+  summarySheet.getColumn(2).width = 22;
+  const chartsSheet = excelWb.addWorksheet("Gráficos");
+  chartsSheet.getCell("A1").value = "Gráficos do intervalo selecionado";
+  chartsSheet.getCell("A2").value = `Furos exportados: ${data.length} · Filtros: ${getActiveFilterLabel()}`;
+  chartsSheet.getCell("A1").font = { bold: true, size: 16, color: { argb: "FF38424B" } };
+  chartsSheet.getCell("A2").font = { italic: true, color: { argb: "FF6C747B" } };
+  const chartDefs = [
+    ["chart-angle", "Ângulo frontal"], ["chart-direction", "Direção / aderência"],
+    ["chart-az", "Desvio de azimute"], ["chart-depth", "Desvio de profundidade"],
+    ["chart-by-plan", "Aderência por plano"], ["chart-hist-az", "Distribuição do azimute"],
+    ["chart-hist-depth", "Distribuição da profundidade"], ["chart-hist-angle", "Distribuição do ângulo"],
+  ];
+  let imageRow = 4;
+  for (const [id, title] of chartDefs) {
+    const canvas = document.getElementById(id);
+    if (!canvas || !canvas.width || !canvas.height) continue;
+    chartsSheet.getCell(`A${imageRow}`).value = title;
+    chartsSheet.getCell(`A${imageRow}`).font = { bold: true, color: { argb: "FF38424B" } };
+    const imageId = excelWb.addImage({ base64: canvas.toDataURL("image/png", 1), extension: "png" });
+    chartsSheet.addImage(imageId, { tl: { col: 0, row: imageRow }, ext: { width: 560, height: 280 } });
+    imageRow += 18;
+  }
+  chartsSheet.getColumn(1).width = 24;
+  const buffer = await excelWb.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `desvios-perfuracao_${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}.xlsx`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
+function getActiveFilterLabel() {
+  return FILTER_DEFS.map((def) => {
+    const value = document.getElementById(def.id)?.value;
+    return value ? `${def.label}: ${def.name ? def.name(value) : value}` : null;
+  }).filter(Boolean).join(" · ") || "Todos os registros";
 }
 
 /* ===================== Mapa de execução (DXF) ===================== */
