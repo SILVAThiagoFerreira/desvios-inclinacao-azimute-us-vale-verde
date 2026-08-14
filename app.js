@@ -52,6 +52,7 @@ const nowBR = () =>
 
 let RECORDS = [];
 let CHARTS = {};
+const DATA_QUALITY = { dateMismatches: 0 };
 
 /* ===================== Status ===================== */
 function setStatus(kind, text) {
@@ -87,7 +88,10 @@ async function loadSheet() {
   }
   populateFilters();
   setupExport();
-  setStatus("ok", `${RECORDS.length} furos carregados.`);
+  const qualityNote = DATA_QUALITY.dateMismatches
+    ? ` · ${DATA_QUALITY.dateMismatches} registro(s) com Ano/Mês corrigido(s) pela Data`
+    : "";
+  setStatus("ok", `${RECORDS.length} furos carregados${qualityNote}.`);
   document.getElementById("last-update").textContent = "Atualizado em " + nowBR();
   render();
 }
@@ -129,6 +133,7 @@ function csvToRows(text) {
 
 /* ===================== Records ===================== */
 function buildRecords(table) {
+  DATA_QUALITY.dateMismatches = 0;
   const idx = {};
   table.cols.forEach((c, i) => { idx[norm(c.label)] = i; });
   const g = (key) => { const i = idx[key]; return i === undefined ? -1 : i; };
@@ -169,8 +174,15 @@ function buildRecords(table) {
     let mes = num(f.mes);
     const dt = parseDateCell(cell(f.data));
     if (dt) {
-      if (ano == null) ano = dt.getFullYear();
-      if (mes == null) mes = dt.getMonth() + 1;
+      const dateAno = dt.getFullYear();
+      const dateMes = dt.getMonth() + 1;
+      if ((ano != null && Math.round(ano) !== dateAno) || (mes != null && Math.round(mes) !== dateMes)) {
+        DATA_QUALITY.dateMismatches += 1;
+      }
+      // A data completa é a fonte temporal mais precisa; Ano/Mês são
+      // mantidos como fallback apenas quando a planilha não traz Data.
+      ano = dateAno;
+      mes = dateMes;
     }
 
     // Regra atual: mantém somente registros de nov/2025 em diante,
@@ -215,6 +227,11 @@ function parseDateCell(v) {
   if (br) {
     const yr = +br[3] < 100 ? 2000 + +br[3] : +br[3];
     const dt = new Date(yr, +br[2] - 1, +br[1]);
+    return isNaN(dt.getTime()) ? null : dt;
+  }
+  const isoDate = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|T)/);
+  if (isoDate) {
+    const dt = new Date(+isoDate[1], +isoDate[2] - 1, +isoDate[3]);
     return isNaN(dt.getTime()) ? null : dt;
   }
   const iso = new Date(s);
@@ -623,7 +640,7 @@ function drawDirection(data) {
 function drawAzByHole(data) {
   destroy("az");
   const pts = data.filter((r) => r.azDelta != null);
-  const labels = pts.map((_, i) => i + 1);
+  const labels = pts.map((r) => r.id);
   CHARTS.az = new Chart(document.getElementById("chart-az"), {
     type: "bar",
     data: {
@@ -664,7 +681,7 @@ function drawAzByHole(data) {
 function drawDepthByHole(data) {
   destroy("depth");
   const pts = data.filter((r) => r.depthDelta != null);
-  const labels = pts.map((_, i) => i + 1);
+  const labels = pts.map((r) => r.id);
   CHARTS.depth = new Chart(document.getElementById("chart-depth"), {
     type: "bar",
     data: {
@@ -773,10 +790,18 @@ function drawHist(canvasId, values, opts = {}) {
   if (opts.xMin != null && opts.xMax != null) {
     min = opts.xMin; max = opts.xMax;
   } else if (opts.symmetricLimits !== false) {
-    const ext = Math.max(...values.map((v) => Math.abs(v))) * 1.05;
+    const ext = Math.max(Math.max(...values.map((v) => Math.abs(v))), 0.1) * 1.05;
     min = -ext; max = ext;
   } else {
     min = Math.min(...values); max = Math.max(...values);
+  }
+  // Evita divisão por zero quando o filtro retorna valores constantes
+  // (por exemplo, todos os desvios iguais a zero).
+  if (!(max > min)) {
+    const center = Number.isFinite(min) ? min : 0;
+    const margin = Math.max(Math.abs(center) * 0.05, 0.5);
+    min = center - margin;
+    max = center + margin;
   }
   const step = (max - min) / bins;
   const counts = new Array(bins).fill(0);
@@ -842,6 +867,244 @@ function setupExport() {
   btn.onclick = () => exportToXlsx(btn);
 }
 
+/* Identidade visual ENAEX usada nas planilhas exportadas. */
+const EXCEL_THEME = {
+  red: "FFE20613",
+  dark: "FF38424B",
+  muted: "FF6C747B",
+  pale: "FFF3F5F6",
+  border: "FFD9DEE2",
+  white: "FFFFFFFF",
+  okFill: "FFEAF5EA",
+  alertFill: "FFFDEBEC",
+};
+
+function excelSolidFill(argb) {
+  return { type: "pattern", pattern: "solid", fgColor: { argb } };
+}
+
+function styleExcelHeaderRow(row) {
+  row.height = 28;
+  row.eachCell((cell) => {
+    cell.font = { bold: true, color: { argb: EXCEL_THEME.white } };
+    cell.fill = excelSolidFill(EXCEL_THEME.dark);
+    cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+    cell.border = {
+      top: { style: "thin", color: { argb: EXCEL_THEME.border } },
+      bottom: { style: "thin", color: { argb: EXCEL_THEME.border } },
+    };
+  });
+}
+
+function styleExcelSectionRow(row, totalColumns) {
+  row.height = 22;
+  for (let column = 1; column <= totalColumns; column += 1) {
+    const cell = row.getCell(column);
+    cell.fill = excelSolidFill(EXCEL_THEME.red);
+    cell.font = { bold: true, color: { argb: EXCEL_THEME.white } };
+    cell.alignment = { vertical: "middle", horizontal: "left" };
+  }
+}
+
+function styleExcelDataRows(sheet, firstRow, lastRow, totalColumns) {
+  for (let rowNumber = firstRow; rowNumber <= lastRow; rowNumber += 1) {
+    const row = sheet.getRow(rowNumber);
+    row.eachCell({ includeEmpty: true }, (cell, column) => {
+      cell.alignment = { vertical: "middle", wrapText: column === 1 };
+      cell.border = {
+        bottom: { style: "hair", color: { argb: EXCEL_THEME.border } },
+      };
+      if (rowNumber % 2 === 0) cell.fill = excelSolidFill(EXCEL_THEME.pale);
+    });
+    for (let column = 1; column <= totalColumns; column += 1) {
+      const cell = row.getCell(column);
+      if (cell.value === "Sim") {
+        cell.font = { bold: true, color: { argb: "FF107C10" } };
+        cell.fill = excelSolidFill(EXCEL_THEME.okFill);
+      } else if (cell.value === "Não") {
+        cell.font = { bold: true, color: { argb: EXCEL_THEME.red } };
+        cell.fill = excelSolidFill(EXCEL_THEME.alertFill);
+      } else if (cell.value === "N/A") {
+        cell.font = { italic: true, color: { argb: EXCEL_THEME.muted } };
+      }
+    }
+  }
+}
+
+function styleExcelReportHeader(sheet, title, subtitle, totalColumns, workbook) {
+  const columns = Math.max(totalColumns, 2);
+  sheet.mergeCells(1, 2, 1, columns);
+  sheet.mergeCells(2, 1, 2, columns);
+  sheet.getCell(1, 2).value = title;
+  sheet.getCell(2, 1).value = subtitle;
+  for (let column = 1; column <= columns; column += 1) {
+    const titleCell = sheet.getCell(1, column);
+    titleCell.fill = excelSolidFill(EXCEL_THEME.red);
+    titleCell.font = { bold: true, size: 16, color: { argb: EXCEL_THEME.white } };
+    titleCell.alignment = { vertical: "middle", horizontal: column === 1 ? "center" : "left" };
+    const subtitleCell = sheet.getCell(2, column);
+    subtitleCell.fill = excelSolidFill(EXCEL_THEME.dark);
+    subtitleCell.font = { italic: true, color: { argb: EXCEL_THEME.white } };
+    subtitleCell.alignment = { vertical: "middle", horizontal: "left", wrapText: true };
+  }
+  sheet.getRow(1).height = 32;
+  sheet.getRow(2).height = 24;
+  sheet.getColumn(1).width = Math.max(sheet.getColumn(1).width || 10, 14);
+
+  // O logo branco já faz parte do pacote estático e é opcional para não
+  // impedir a exportação quando a página estiver offline/local.
+  if (workbook.__enaexLogoId != null) {
+    sheet.addImage(workbook.__enaexLogoId, {
+      tl: { col: 0.15, row: 0.18 },
+      ext: { width: 56, height: 22 },
+    });
+  }
+  sheet.views = [{ state: "frozen", ySplit: 4 }];
+}
+
+async function loadExcelBrandLogo(workbook) {
+  if (workbook.__enaexLogoId !== undefined) return workbook.__enaexLogoId;
+  workbook.__enaexLogoId = null;
+  try {
+    const response = await fetch("./assets/enaex-logo-white.png", { cache: "force-cache" });
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    workbook.__enaexLogoId = workbook.addImage({ base64: dataUrl, extension: "png" });
+  } catch (error) {
+    console.warn("Logo ENAEX não disponível para a planilha; seguindo sem a imagem.", error);
+  }
+  return workbook.__enaexLogoId;
+}
+
+function chartCanvasDataUrl(chartKey) {
+  const chart = CHARTS[chartKey];
+  if (!chart?.canvas || typeof chart.canvas.toDataURL !== "function") return null;
+  try {
+    return chart.canvas.toDataURL("image/png", 1);
+  } catch (error) {
+    console.warn(`Não foi possível capturar o gráfico ${chartKey} para o Excel.`, error);
+    return null;
+  }
+}
+
+function addExcelChartSheet(workbook, definition, data, filterLabel, logoId) {
+  const sheet = workbook.addWorksheet(definition.sheetName);
+  const columns = definition.headers.length;
+  styleExcelReportHeader(
+    sheet,
+    definition.title,
+    `Período/seleção atual · ${data.length} furo(s) · ${filterLabel}`,
+    Math.max(columns, 6),
+    workbook,
+  );
+
+  const imageData = chartCanvasDataUrl(definition.chartKey);
+  if (imageData) {
+    const imageId = workbook.addImage({ base64: imageData, extension: "png" });
+    sheet.addImage(imageId, {
+      tl: { col: 0, row: 3 },
+      ext: { width: 920, height: 380 },
+    });
+  } else {
+    sheet.getCell(4, 1).value = "Imagem do gráfico indisponível; os dados abaixo permanecem disponíveis para conferência.";
+    sheet.getCell(4, 1).font = { italic: true, color: { argb: EXCEL_THEME.muted } };
+  }
+
+  const sectionRow = 30;
+  sheet.mergeCells(sectionRow, 1, sectionRow, columns);
+  sheet.getCell(sectionRow, 1).value = "Dados utilizados no gráfico";
+  styleExcelSectionRow(sheet.getRow(sectionRow), columns);
+  const headerRow = sectionRow + 1;
+  sheet.getRow(headerRow).values = definition.headers;
+  styleExcelHeaderRow(sheet.getRow(headerRow));
+  const firstDataRow = headerRow + 1;
+  data.forEach((row) => sheet.addRow(row));
+  const lastDataRow = firstDataRow + Math.max(data.length - 1, 0);
+  styleExcelDataRows(sheet, firstDataRow, lastDataRow, columns);
+  sheet.autoFilter = {
+    from: { row: headerRow, column: 1 },
+    to: { row: lastDataRow, column: columns },
+  };
+  definition.widths.forEach((width, index) => { sheet.getColumn(index + 1).width = width; });
+  sheet.getColumn(1).width = Math.max(sheet.getColumn(1).width || 12, 14);
+  return sheet;
+}
+
+function buildExcelChartDefinitions(data) {
+  const withinAngle = (value) => value != null && value >= LIMITS.angleMin && value <= LIMITS.angleMax;
+  const withinAz = (value) => value != null && Math.abs(value) <= LIMITS.azimuth;
+  const withinZ = (value) => value != null && Math.abs(value) <= LIMITS.depth;
+  const dateValue = (value) => value instanceof Date && !isNaN(value) ? value : null;
+  const groups = {};
+  data.forEach((row) => (groups[row.plano] ||= []).push(row));
+  const planos = Object.keys(groups).sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
+
+  const histogramRows = (values, bins, min, max, digits) =>
+    histogramBuckets(values, bins, min, max, digits).map(([faixa, quantidade]) => [faixa, quantidade]);
+  const azValues = data.map((row) => row.azDelta).filter((value) => value != null);
+  const zValues = data.map((row) => row.depthDelta).filter((value) => value != null);
+  const angleValues = data.map((row) => row.angle).filter((value) => value != null);
+  const azExtent = Math.max(...azValues.map((value) => Math.abs(value)), 1) * 1.05;
+  const zExtent = Math.max(...zValues.map((value) => Math.abs(value)), 0.1) * 1.05;
+
+  return [
+    {
+      chartKey: "angle", sheetName: "Gráfico Ângulo", title: "Ângulo frontal por furo",
+      headers: ["Plano", "ID", "Data", "Ângulo frontal (°)", "Dentro do limite"],
+      widths: [18, 10, 14, 20, 20],
+      rows: data.filter((row) => row.angle != null).map((row) => [row.plano, row.id, dateValue(row.data), row.angle, withinAngle(row.angle) ? "Sim" : "Não"]),
+    },
+    {
+      chartKey: "direction", sheetName: "Gráfico Direção", title: "Direção dos furos · Δ Azimute × Δ Profundidade",
+      headers: ["Plano", "ID", "Data", "Δ Azimute (°)", "Δ Profundidade (m)", "Dentro da caixa"],
+      widths: [18, 10, 14, 18, 23, 18],
+      rows: data.filter((row) => row.azDelta != null && row.depthDelta != null).map((row) => [row.plano, row.id, dateValue(row.data), row.azDelta, row.depthDelta, withinAz(row.azDelta) && withinZ(row.depthDelta) ? "Sim" : "Não"]),
+    },
+    {
+      chartKey: "az", sheetName: "Gráfico Δ Azimute", title: "Δ Azimute por furo",
+      headers: ["Plano", "ID", "Data", "Δ Azimute (°)", "Dentro do limite"],
+      widths: [18, 10, 14, 18, 20],
+      rows: data.filter((row) => row.azDelta != null).map((row) => [row.plano, row.id, dateValue(row.data), row.azDelta, withinAz(row.azDelta) ? "Sim" : "Não"]),
+    },
+    {
+      chartKey: "depth", sheetName: "Gráfico Δ Profundidade", title: "Δ Profundidade por furo",
+      headers: ["Plano", "ID", "Data", "Δ Profundidade (m)", "Dentro do limite"],
+      widths: [18, 10, 14, 23, 20],
+      rows: data.filter((row) => row.depthDelta != null).map((row) => [row.plano, row.id, dateValue(row.data), row.depthDelta, withinZ(row.depthDelta) ? "Sim" : "Não"]),
+    },
+    {
+      chartKey: "byPlan", sheetName: "Gráfico por Plano", title: "Aderência por plano",
+      headers: ["Plano", "Furos", "Aderência Ângulo (%)", "Aderência Azimute (%)", "Aderência Z (%)"],
+      widths: [22, 12, 23, 25, 20],
+      rows: planos.map((plano) => {
+        const metrics = computeMetrics(groups[plano]);
+        return [plano, metrics.total, isFinite(metrics.anglePct) ? metrics.anglePct : null, isFinite(metrics.azPct) ? metrics.azPct : null, isFinite(metrics.zPct) ? metrics.zPct : null];
+      }),
+    },
+    {
+      chartKey: "chart-hist-az", sheetName: "Histograma Δ Azimute", title: "Distribuição do Δ Azimute",
+      headers: ["Faixa Δ Azimute (°)", "Nº de furos"], widths: [24, 16],
+      rows: histogramRows(azValues, 20, -azExtent, azExtent, 1),
+    },
+    {
+      chartKey: "chart-hist-depth", sheetName: "Histograma Δ Prof", title: "Distribuição do Δ Profundidade",
+      headers: ["Faixa Δ Profundidade (m)", "Nº de furos"], widths: [28, 16],
+      rows: histogramRows(zValues, 20, -zExtent, zExtent, 2),
+    },
+    {
+      chartKey: "chart-hist-angle", sheetName: "Histograma Ângulo", title: "Distribuição do ângulo frontal",
+      headers: ["Faixa Ângulo (°)", "Nº de furos"], widths: [20, 16],
+      rows: histogramRows(angleValues, 18, 0, 30, 1),
+    },
+  ];
+}
+
 async function exportToXlsx(btn = document.getElementById("export-xlsx")) {
   const originalLabel = btn?.textContent || "⤓ Excel";
   if (btn) {
@@ -849,7 +1112,7 @@ async function exportToXlsx(btn = document.getElementById("export-xlsx")) {
     btn.textContent = "Gerando Excel…";
   }
   try {
-  if (typeof XLSX === "undefined" || typeof ExcelJS === "undefined" || typeof JSZip === "undefined") {
+  if (typeof ExcelJS === "undefined" || typeof JSZip === "undefined") {
     throw new Error("As bibliotecas de exportação ainda não terminaram de carregar. Atualize a página e tente novamente.");
   }
   const data = filtered();
@@ -864,7 +1127,9 @@ async function exportToXlsx(btn = document.getElementById("export-xlsx")) {
   const selectedMonth = document.getElementById("filter-month")?.value || "Todos";
   const ano = selectedYear === "Todos" ? "Todos" : selectedYear;
   const meses = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
-  const mes = meses[now.getMonth()];
+  const selectedMonthLabel = selectedMonth === "Todos"
+    ? "Todos"
+    : (meses[Number(selectedMonth) - 1] || selectedMonth);
 
   const withinAngle = (v) => v != null && v >= LIMITS.angleMin && v <= LIMITS.angleMax;
   const withinAz = (v) => v != null && Math.abs(v) <= LIMITS.azimuth;
@@ -891,55 +1156,101 @@ async function exportToXlsx(btn = document.getElementById("export-xlsx")) {
     "Z dentro do limite": r.depthDelta == null ? "" : (withinZ(r.depthDelta) ? "Sim" : "Não"),
   }));
 
-  const ws = XLSX.utils.json_to_sheet(rows);
-  // largura de coluna aproximada
-  const cols = Object.keys(rows[0]).map((k) => ({
-    wch: Math.max(k.length + 2, 12),
-  }));
-  ws["!cols"] = cols;
-
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Desvios");
-
   // Aba de resumo com métricas
   const m = computeMetrics(data);
-  const resumo = [
-    ["Relatório de Desvios de Perfuração"],
-    ["Gerado em", dataStr],
-    ["Ano", ano],
-    ["Mês", selectedMonth === "Todos" ? "Todos" : (meses[Number(selectedMonth) - 1] || selectedMonth)],
-    [],
-    ["Furos analisados", m.total],
-    ["Aderência Ângulo (%)", isFinite(m.anglePct) ? +m.anglePct.toFixed(2) : ""],
-    ["Aderência Azimute (%)", isFinite(m.azPct) ? +m.azPct.toFixed(2) : ""],
-    ["Aderência Z (%)", isFinite(m.zPct) ? +m.zPct.toFixed(2) : ""],
-    ["Meta (%)", LIMITS.meta],
-  ];
-  const wsResumo = XLSX.utils.aoa_to_sheet(resumo);
-  wsResumo["!cols"] = [{ wch: 28 }, { wch: 20 }];
-  XLSX.utils.book_append_sheet(wb, wsResumo, "Resumo");
-
   const excelWb = new ExcelJS.Workbook();
+  excelWb.creator = "ENAEX · Análise de Desvios";
+  excelWb.created = now;
+  await loadExcelBrandLogo(excelWb);
+
+  const filterLabel = getActiveFilterLabel();
+  const dataHeaders = Object.keys(rows[0]);
   const dataSheet = excelWb.addWorksheet("Desvios");
-  dataSheet.addRows(XLSX.utils.sheet_to_json(ws, { header: 1 }));
-  dataSheet.columns.forEach((col) => { col.width = Math.max(14, Math.min(28, String(col.header || "").length + 3)); });
+  styleExcelReportHeader(
+    dataSheet,
+    "Base calculada · Desvios de perfuração",
+    `Período/seleção atual · ${data.length} furo(s) · ${filterLabel}`,
+    dataHeaders.length,
+    excelWb,
+  );
+  dataSheet.mergeCells(4, 1, 4, dataHeaders.length);
+  dataSheet.getCell(4, 1).value = "Base completa dos furos filtrados";
+  styleExcelSectionRow(dataSheet.getRow(4), dataHeaders.length);
+  dataSheet.getRow(5).values = dataHeaders;
+  styleExcelHeaderRow(dataSheet.getRow(5));
+  rows.forEach((row) => dataSheet.addRow(dataHeaders.map((header) => row[header])));
+  styleExcelDataRows(dataSheet, 6, 5 + rows.length, dataHeaders.length);
+  dataSheet.autoFilter = {
+    from: { row: 5, column: 1 },
+    to: { row: 5 + rows.length, column: dataHeaders.length },
+  };
+  dataHeaders.forEach((header, index) => {
+    dataSheet.getColumn(index + 1).width = Math.max(14, Math.min(28, header.length + 3));
+  });
+  dataSheet.views = [{ state: "frozen", ySplit: 5 }];
+
   const summarySheet = excelWb.addWorksheet("Resumo");
-  summarySheet.addRows(XLSX.utils.sheet_to_json(wsResumo, { header: 1 }));
-  summarySheet.getColumn(1).width = 30;
-  summarySheet.getColumn(2).width = 22;
+  styleExcelReportHeader(
+    summarySheet,
+    "Relatório de Desvios de Perfuração",
+    `ENAEX · gerado em ${dataStr} · ${filterLabel}`,
+    4,
+    excelWb,
+  );
+  summarySheet.mergeCells(4, 1, 4, 4);
+  summarySheet.getCell(4, 1).value = "Identificação e seleção exportada";
+  styleExcelSectionRow(summarySheet.getRow(4), 4);
+  summarySheet.addRows([
+    ["Gerado em", dataStr],
+    ["Ano selecionado", ano],
+    ["Mês selecionado", selectedMonthLabel],
+    ["Filtro aplicado", filterLabel],
+  ]);
+  summarySheet.mergeCells(9, 1, 9, 4);
+  summarySheet.getCell(9, 1).value = "Indicadores de aderência";
+  styleExcelSectionRow(summarySheet.getRow(9), 4);
+  summarySheet.addRows([
+    ["Furos analisados", m.total],
+    ["Aderência Ângulo (%)", isFinite(m.anglePct) ? +m.anglePct.toFixed(2) : null],
+    ["Aderência Azimute (%)", isFinite(m.azPct) ? +m.azPct.toFixed(2) : null],
+    ["Aderência Z (%)", isFinite(m.zPct) ? +m.zPct.toFixed(2) : null],
+    ["Meta (%)", LIMITS.meta],
+  ]);
+  summarySheet.mergeCells(15, 1, 15, 4);
+  summarySheet.getCell(15, 1).value = "Parâmetros de controle";
+  styleExcelSectionRow(summarySheet.getRow(15), 4);
+  summarySheet.addRows([
+    ["Ângulo mínimo (°)", LIMITS.angleMin],
+    ["Ângulo máximo (°)", LIMITS.angleMax],
+    ["Limite de azimute (°)", LIMITS.azimuth],
+    ["Limite de profundidade (m)", LIMITS.depth],
+  ]);
+  styleExcelDataRows(summarySheet, 5, 8, 2);
+  styleExcelDataRows(summarySheet, 10, 14, 2);
+  styleExcelDataRows(summarySheet, 16, 19, 2);
+  summarySheet.getColumn(1).width = 32;
+  summarySheet.getColumn(2).width = 24;
+  summarySheet.getColumn(3).width = 18;
+  summarySheet.getColumn(4).width = 18;
+  summarySheet.views = [{ state: "frozen", ySplit: 4 }];
+
   const chartsSheet = excelWb.addWorksheet("Gráficos");
-  chartsSheet.getCell("A1").value = "Gráficos do intervalo selecionado";
-  chartsSheet.getCell("A2").value = `Furos exportados: ${data.length} · Filtros: ${getActiveFilterLabel()}`;
-  chartsSheet.getCell("A3").value = "Os oito gráficos analíticos abaixo usam o mesmo filtro da tela. O mapa de execução depende do DXF do plano e permanece no dashboard.";
-  chartsSheet.getCell("A1").font = { bold: true, size: 16, color: { argb: "FF38424B" } };
-  chartsSheet.getCell("A2").font = { italic: true, color: { argb: "FF6C747B" } };
-  chartsSheet.getCell("A3").font = { italic: true, color: { argb: "FF6C747B" } };
+  styleExcelReportHeader(
+    chartsSheet,
+    "Gráficos do período selecionado",
+    `Os oito gráficos analíticos usam o mesmo filtro da tela · ${filterLabel}`,
+    10,
+    excelWb,
+  );
   chartsSheet.getColumn(1).width = 24;
   const chartDataSheet = excelWb.addWorksheet("Dados gráficos");
   chartDataSheet.state = "hidden";
   const chartRefs = writeExcelChartData(chartDataSheet, data);
+  buildExcelChartDefinitions(data).forEach((definition) => {
+    addExcelChartSheet(excelWb, definition, definition.rows, filterLabel, excelWb.__enaexLogoId);
+  });
   const buffer = await excelWb.xlsx.writeBuffer();
-  const nativeBuffer = await addNativeExcelChartsV2(buffer, chartRefs);
+  const nativeBuffer = await addNativeExcelChartsV2(buffer, chartRefs, chartsSheet.id);
   const blob = new Blob([nativeBuffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
@@ -1049,7 +1360,7 @@ function writeExcelChartData(sheet, data) {
   return { holeStart, holeEnd, planStart, planEnd, histStart, histEnd };
 }
 
-async function addNativeExcelChartsV2(buffer, refs) {
+async function addNativeExcelChartsV2(buffer, refs, chartSheetId = 3) {
   const zip = await JSZip.loadAsync(buffer);
   const ns = "http://schemas.openxmlformats.org/drawingml/2006/main";
   const cns = "http://schemas.openxmlformats.org/drawingml/2006/chart";
@@ -1086,10 +1397,10 @@ async function addNativeExcelChartsV2(buffer, refs) {
   zip.file("xl/drawings/drawing1.xml", `<?xml version="1.0" encoding="UTF-8"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="${ns}">${anchors}</xdr:wsDr>`);
   zip.file("xl/drawings/_rels/drawing1.xml.rels", `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${defs.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart${i + 1}.xml"/>`).join("")}</Relationships>`);
   defs.forEach((def, i) => zip.file(`xl/charts/chart${i + 1}.xml`, chartXml(def)));
-  zip.file("xl/worksheets/_rels/sheet3.xml.rels", `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>`);
-  let sheet = await zip.file("xl/worksheets/sheet3.xml").async("string");
+  zip.file(`xl/worksheets/_rels/sheet${chartSheetId}.xml.rels`, `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>`);
+  let sheet = await zip.file(`xl/worksheets/sheet${chartSheetId}.xml`).async("string");
   sheet = sheet.replace("</worksheet>", `<drawing xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId1"/></worksheet>`);
-  zip.file("xl/worksheets/sheet3.xml", sheet);
+  zip.file(`xl/worksheets/sheet${chartSheetId}.xml`, sheet);
   let types = await zip.file("[Content_Types].xml").async("string");
   types = types.replace("</Types>", defs.map((_, i) => `<Override PartName="/xl/charts/chart${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>`).join("") + `<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>`);
   zip.file("[Content_Types].xml", types);
@@ -1219,6 +1530,8 @@ function parseDxfHoles(text) {
         { x: gn(e.raw, 10), y: gn(e.raw, 20) },
         { x: gn(e.raw, 11), y: gn(e.raw, 21) },
       ];
+    } else if (e.type === "TEXT" && layer === "NUMBER") {
+      cur.id = gf(e.raw, 1, "").trim();
     } else if (e.type === "POLYLINE" && layer === "REAL HOLE") {
       cur.real = e.verts.map(pt).filter((p) => isFinite(p.x) && isFinite(p.y));
     }
@@ -1230,6 +1543,12 @@ function parseDxfHoles(text) {
 }
 
 let MAP_TOKEN = 0;
+
+function currentMapFilterKey() {
+  return ["filter-year", "filter-month", "filter-plan"]
+    .map((id) => document.getElementById(id)?.value || "")
+    .join("|");
+}
 
 async function drawMap() {
   const svg = document.getElementById("chart-map");
@@ -1251,6 +1570,7 @@ async function drawMap() {
   const planos = [...planosSet].sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
 
   const token = ++MAP_TOKEN;
+  const filterKey = currentMapFilterKey();
   svg.innerHTML = "";
   status.classList.add("is-visible");
   status.textContent = "Carregando geometria dos planos…";
@@ -1266,7 +1586,11 @@ async function drawMap() {
     : `${planos.length} plano(s) sobrepostos — planejado em cinza, executado em vermelho, emboques marcados.`;
 
   const results = await Promise.all(planos.map((p) => fetchDxfHoles(p).then((h) => ({ plano: p, holes: h }))));
-  if (token !== MAP_TOKEN) return;
+  // Re-rendering can start several asynchronous DXF loads in sequence. A
+  // previous request may finish later, but it must not replace a newer
+  // selection. Compare the actual filter values instead of relying only on a
+  // mutable counter, which can become stale across browser event turns.
+  if (filterKey !== currentMapFilterKey()) return;
 
   const withGeom = results.filter((r) => r.holes && r.holes.length);
   const missing = results.filter((r) => !r.holes || !r.holes.length).map((r) => r.plano);
@@ -1279,6 +1603,7 @@ async function drawMap() {
     return;
   }
   status.classList.remove("is-visible");
+  status.textContent = "";
 
   // Bounding box conjugado
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
@@ -1287,7 +1612,23 @@ async function drawMap() {
     if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
     if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
   };
-  withGeom.forEach(({ holes }) => holes.forEach((h) => {
+  const visibleIdsByPlan = new Map();
+  planos.forEach((plano) => {
+    visibleIdsByPlan.set(
+      plano,
+      new Set(RECORDS
+        .filter((r) =>
+          r.plano === plano &&
+          (!y || String(r.ano) === y) &&
+          (!mo || String(r.mes) === mo) &&
+          (!selected || r.plano === selected))
+        .map((r) => String(r.id))),
+    );
+  });
+
+  withGeom.forEach(({ plano, holes }) => holes
+    .filter((h) => !h.id || visibleIdsByPlan.get(plano)?.has(String(Number(h.id))) || visibleIdsByPlan.get(plano)?.has(String(h.id)))
+    .forEach((h) => {
     if (h.collar) pushPt(h.collar);
     if (h.planned) h.planned.forEach(pushPt);
     if (h.real) h.real.forEach(pushPt);
@@ -1341,8 +1682,10 @@ async function drawMap() {
   const collarG = document.createElementNS(NS, "g");
   collarG.setAttribute("class", "map-collar");
 
-  withGeom.forEach(({ holes }) => {
-    holes.forEach((h) => {
+  withGeom.forEach(({ plano, holes }) => {
+    holes
+      .filter((h) => !h.id || visibleIdsByPlan.get(plano)?.has(String(Number(h.id))) || visibleIdsByPlan.get(plano)?.has(String(h.id)))
+      .forEach((h) => {
       if (h.planned && h.planned.length >= 2) {
         const [a, b] = h.planned;
         const line = document.createElementNS(NS, "line");
@@ -1364,7 +1707,7 @@ async function drawMap() {
         dot.setAttribute("r", selected ? 2.6 : 1.9);
         collarG.appendChild(dot);
       }
-    });
+      });
   });
 
   frag.appendChild(plannedG);
