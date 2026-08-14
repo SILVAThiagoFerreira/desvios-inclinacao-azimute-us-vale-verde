@@ -77,7 +77,7 @@ function excelCleanStyleRows(sheet, firstRow, lastRow, totalColumns) {
   }
 }
 
-function excelCleanReportHeader(sheet, title, subtitle, totalColumns) {
+function excelCleanReportHeader(sheet, title, subtitle, totalColumns, logoId = null) {
   const columns = Math.max(totalColumns, 2);
   sheet.mergeCells(1, 1, 1, columns);
   sheet.mergeCells(2, 1, 2, columns);
@@ -96,6 +96,12 @@ function excelCleanReportHeader(sheet, title, subtitle, totalColumns) {
   sheet.getRow(1).height = 36;
   sheet.getRow(2).height = 26;
   sheet.getRow(3).height = 8;
+  if (logoId != null && typeof sheet.addImage === "function") {
+    sheet.addImage(logoId, {
+      tl: { col: Math.max(columns - 3, 0.4), row: 0.24 },
+      ext: { width: 56, height: 17 },
+    });
+  }
   sheet.views = [{ state: "frozen", ySplit: 4, showGridLines: false, zoomScale: 90 }];
 }
 
@@ -343,9 +349,10 @@ async function exportToXlsx(btn = document.getElementById("export-xlsx")) {
     workbook.company = "ENAEX";
     workbook.created = now;
     workbook.modified = now;
+    const logoId = typeof loadExcelBrandLogo === "function" ? await loadExcelBrandLogo(workbook) : null;
 
     const summary = workbook.addWorksheet("Resumo");
-    excelCleanReportHeader(summary, "Relatório de Desvios de Perfuração", `ENAEX · gerado em ${dataStr} · Período efetivo: ${effectivePeriod} · ${filterLabel}`, 4);
+    excelCleanReportHeader(summary, "Relatório de Desvios de Perfuração", `ENAEX · gerado em ${dataStr} · Período efetivo: ${effectivePeriod} · ${filterLabel}`, 4, logoId);
     summary.mergeCells(4, 1, 4, 4); summary.getCell(4, 1).value = "Identificação e seleção exportada"; excelCleanStyleSection(summary.getRow(4), 4);
     summary.addRows([["Gerado em", dataStr, "", ""], ["Ano selecionado", selectedYear, "", ""], ["Mês selecionado", selectedMonthLabel, "", ""], ["Período efetivo", effectivePeriod, "Filtro aplicado", filterLabel]]);
     summary.mergeCells(9, 1, 9, 4); summary.getCell(9, 1).value = "Indicadores de aderência"; excelCleanStyleSection(summary.getRow(9), 4);
@@ -365,7 +372,7 @@ async function exportToXlsx(btn = document.getElementById("export-xlsx")) {
     summary.pageSetup = { orientation: "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 1 };
 
     const dataSheet = workbook.addWorksheet("Desvios");
-    excelCleanReportHeader(dataSheet, "Base calculada · Desvios de perfuração", `Período efetivo: ${effectivePeriod} · ${data.length} furo(s) · ${filterLabel}`, headers.length);
+    excelCleanReportHeader(dataSheet, "Base calculada · Desvios de perfuração", `Período efetivo: ${effectivePeriod} · ${data.length} furo(s) · ${filterLabel}`, headers.length, logoId);
     dataSheet.mergeCells(4, 1, 4, headers.length); dataSheet.getCell(4, 1).value = "Base completa dos furos filtrados · use os filtros do cabeçalho para conferência"; excelCleanStyleSection(dataSheet.getRow(4), headers.length);
     dataSheet.getRow(5).values = headers; excelCleanStyleHeader(dataSheet.getRow(5)); rows.forEach((row) => dataSheet.addRow(headers.map((header) => row[header])));
     excelCleanStyleRows(dataSheet, 6, 5 + rows.length, headers.length);
@@ -379,7 +386,7 @@ async function exportToXlsx(btn = document.getElementById("export-xlsx")) {
     dataSheet.pageSetup = { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
 
     const chartsSheet = workbook.addWorksheet("Gráficos");
-    excelCleanReportHeader(chartsSheet, "Gráficos do período selecionado", `Período efetivo: ${effectivePeriod} · Oito gráficos nativos e editáveis do Excel · ${data.length} furo(s) · ${filterLabel}`, 18);
+    excelCleanReportHeader(chartsSheet, "Gráficos do período selecionado", `Período efetivo: ${effectivePeriod} · Oito gráficos nativos e editáveis do Excel · ${data.length} furo(s) · ${filterLabel}`, 18, logoId);
     chartsSheet.mergeCells(4, 1, 4, 18); chartsSheet.getCell(4, 1).value = "PAINEL ANALÍTICO · clique em qualquer gráfico para editar séries, cores e eixos"; excelCleanStyleSection(chartsSheet.getRow(4), 18);
     for (let column = 1; column <= 18; column += 1) chartsSheet.getColumn(column).width = 11.5;
     for (let row = 5; row <= 75; row += 1) chartsSheet.getRow(row).height = 18;
