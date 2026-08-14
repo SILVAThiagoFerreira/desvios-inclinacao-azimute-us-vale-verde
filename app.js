@@ -548,10 +548,14 @@ function baseScales({ xTitle, yTitle, xMin, xMax, yMin, yMax } = {}) {
   };
 }
 
+function holeChartLabel(row) {
+  return `${row.plano} · ${row.id}`;
+}
+
 /* --- 1. Ângulo frontal por furo --- */
 function drawAngle(data) {
   destroy("angle");
-  const points = data.filter((r) => r.angle != null).map((r) => ({ x: r.id, y: r.angle, plano: r.plano }));
+  const points = data.filter((r) => r.angle != null).map((r, index) => ({ x: index + 1, y: r.angle, plano: r.plano, id: r.id, label: holeChartLabel(r) }));
   const ctx = document.getElementById("chart-angle");
   const colored = points.map((p) => ({
     ...p,
@@ -576,12 +580,12 @@ function drawAngle(data) {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            label: (c) => `${c.raw.plano} · furo ${c.raw.x}: ${fmtNum(c.raw.y, 2)}°`,
+            label: (c) => `${c.raw.label}: ${fmtNum(c.raw.y, 2)}°`,
           },
         },
         limitLines: { yLines: [LIMITS.angleMin, LIMITS.angleMax], color: C.red, dash: [5, 4] },
       },
-      scales: baseScales({ xTitle: "ID do furo", yTitle: "Ângulo frontal [°]", yMin: 0, yMax: 30 }),
+      scales: baseScales({ xTitle: "Ordem dos furos filtrados", yTitle: "Ângulo frontal [°]", yMin: 0, yMax: 30 }),
     },
   });
 }
@@ -640,7 +644,7 @@ function drawDirection(data) {
 function drawAzByHole(data) {
   destroy("az");
   const pts = data.filter((r) => r.azDelta != null);
-  const labels = pts.map((r) => r.id);
+  const labels = pts.map(holeChartLabel);
   CHARTS.az = new Chart(document.getElementById("chart-az"), {
     type: "bar",
     data: {
@@ -658,7 +662,7 @@ function drawAzByHole(data) {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            title: (t) => `${pts[t[0].dataIndex].plano} · furo ${pts[t[0].dataIndex].id}`,
+            title: (t) => holeChartLabel(pts[t[0].dataIndex]),
             label: (c) => `ΔAz ${fmtNum(c.raw, 2)}°`,
           },
         },
@@ -681,7 +685,7 @@ function drawAzByHole(data) {
 function drawDepthByHole(data) {
   destroy("depth");
   const pts = data.filter((r) => r.depthDelta != null);
-  const labels = pts.map((r) => r.id);
+  const labels = pts.map(holeChartLabel);
   CHARTS.depth = new Chart(document.getElementById("chart-depth"), {
     type: "bar",
     data: {
@@ -699,7 +703,7 @@ function drawDepthByHole(data) {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            title: (t) => `${pts[t[0].dataIndex].plano} · furo ${pts[t[0].dataIndex].id}`,
+            title: (t) => holeChartLabel(pts[t[0].dataIndex]),
             label: (c) => `ΔProf ${fmtNum(c.raw, 2)} m`,
           },
         },

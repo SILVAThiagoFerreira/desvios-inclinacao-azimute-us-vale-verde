@@ -124,13 +124,17 @@ function excelCleanSetRow(sheet, rowNumber, startColumn, values) {
   values.forEach((value, index) => { sheet.getCell(rowNumber, startColumn + index).value = value; });
 }
 
+function excelCleanHoleLabel(row) {
+  return `${row.plano} · ${row.id}`;
+}
+
 function writeExcelCleanChartData(sheet, data) {
   excelCleanSetRow(sheet, 1, 1, [
-    "Plano", "ID", "Ângulo frontal (°)", "Ângulo mín.", "Ângulo máx.",
+    "Plano", "Identificador do furo", "Ângulo frontal (°)", "Ângulo mín.", "Ângulo máx.",
     "Δ Azimute (°)", "Azimute mín.", "Azimute máx.", "Δ Profundidade (m)", "Z mín.", "Z máx.",
   ]);
   data.forEach((row) => sheet.addRow([
-    row.plano, String(row.id), row.angle, LIMITS.angleMin, LIMITS.angleMax,
+    row.plano, excelCleanHoleLabel(row), row.angle, LIMITS.angleMin, LIMITS.angleMax,
     row.azDelta, -LIMITS.azimuth, LIMITS.azimuth, row.depthDelta, -LIMITS.depth, LIMITS.depth,
   ]));
   const holeStart = 2;
@@ -196,17 +200,17 @@ function buildExcelCleanChartDefinitions(refs) {
   return [
     {
       title: "Ângulo frontal por furo", type: "line", cat: [refs.angle.cat, refs.holeStart, refs.holeEnd],
-      xTitle: "ID do furo", yTitle: "Ângulo (°)",
+      xTitle: "Plano · ID do furo", yTitle: "Ângulo (°)",
       series: [holeSeries("Ângulo executado", refs.angle.value, EXCEL_CLEAN_THEME.blue), holeSeries("Limite mínimo", refs.angle.min, EXCEL_CLEAN_THEME.red, { dash: "dash" }), holeSeries("Limite máximo", refs.angle.max, EXCEL_CLEAN_THEME.red, { dash: "dash" })],
     },
     {
-      title: "Δ Azimute por furo", type: "line", cat: [refs.az.cat, refs.holeStart, refs.holeEnd],
-      xTitle: "ID do furo", yTitle: "Desvio (°)",
+      title: "Δ Azimute por furo", type: "bar", cat: [refs.az.cat, refs.holeStart, refs.holeEnd],
+      xTitle: "Plano · ID do furo", yTitle: "Desvio (°)",
       series: [holeSeries("Δ Azimute", refs.az.value, EXCEL_CLEAN_THEME.orange), holeSeries("Limite mínimo", refs.az.min, EXCEL_CLEAN_THEME.red, { dash: "dash" }), holeSeries("Limite máximo", refs.az.max, EXCEL_CLEAN_THEME.red, { dash: "dash" })],
     },
     {
-      title: "Δ Profundidade por furo", type: "line", cat: [refs.depth.cat, refs.holeStart, refs.holeEnd],
-      xTitle: "ID do furo", yTitle: "Desvio (m)",
+      title: "Δ Profundidade por furo", type: "bar", cat: [refs.depth.cat, refs.holeStart, refs.holeEnd],
+      xTitle: "Plano · ID do furo", yTitle: "Desvio (m)",
       series: [holeSeries("Δ Profundidade", refs.depth.value, EXCEL_CLEAN_THEME.teal), holeSeries("Limite mínimo", refs.depth.min, EXCEL_CLEAN_THEME.red, { dash: "dash" }), holeSeries("Limite máximo", refs.depth.max, EXCEL_CLEAN_THEME.red, { dash: "dash" })],
     },
     {
@@ -245,7 +249,10 @@ async function addNativeExcelChartsClean(buffer, refs, chartSheetId) {
     const xTitle = def.xTitle ? `<c:title>${textXml(def.xTitle, 850, true)}</c:title>` : "";
     const yTitle = def.yTitle ? `<c:title>${textXml(def.yTitle, 850, true)}</c:title>` : "";
     if (def.type === "scatter") return `<c:valAx><c:axId val="10"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/>${xTitle}<c:majorGridlines/><c:numFmt formatCode="0.00" sourceLinked="0"/><c:crossAx val="11"/><c:crosses val="autoZero"/></c:valAx><c:valAx><c:axId val="11"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/>${yTitle}<c:majorGridlines/><c:numFmt formatCode="0.00" sourceLinked="0"/><c:crossAx val="10"/><c:crosses val="autoZero"/></c:valAx>`;
-    return `<c:catAx><c:axId val="10"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/>${xTitle}<c:tickLblPos val="nextTo"/><c:crossAx val="11"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/></c:catAx><c:valAx><c:axId val="11"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/>${yTitle}<c:majorGridlines/><c:numFmt formatCode="0.00" sourceLinked="0"/><c:crossAx val="10"/><c:crosses val="autoZero"/></c:valAx>`;
+    const categoryCount = def.cat ? def.cat[2] - def.cat[1] + 1 : 0;
+    const categorySkip = categoryCount > 100 ? 10 : categoryCount > 40 ? 5 : 1;
+    const skipXml = categorySkip > 1 ? `<c:tickLblSkip val="${categorySkip}"/><c:tickMarkSkip val="${categorySkip}"/>` : "";
+    return `<c:catAx><c:axId val="10"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/>${xTitle}<c:tickLblPos val="nextTo"/>${skipXml}<c:crossAx val="11"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/></c:catAx><c:valAx><c:axId val="11"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/>${yTitle}<c:majorGridlines/><c:numFmt formatCode="0.00" sourceLinked="0"/><c:crossAx val="10"/><c:crosses val="autoZero"/></c:valAx>`;
   };
   const chartXml = (def) => {
     const kind = def.type === "line" ? "lineChart" : def.type === "scatter" ? "scatterChart" : "barChart";
@@ -309,6 +316,13 @@ async function exportToXlsx(btn = document.getElementById("export-xlsx")) {
     const selectedMonth = document.getElementById("filter-month")?.value || "Todos";
     const months = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
     const selectedMonthLabel = selectedMonth === "Todos" ? "Todos" : (months[Number(selectedMonth) - 1] || selectedMonth);
+    const periodYears = [...new Set(data.map((row) => row.ano).filter((value) => value != null))].sort((a, b) => a - b);
+    const periodMonths = [...new Set(data.map((row) => row.mes).filter((value) => value != null))].sort((a, b) => a - b);
+    let effectivePeriod = "Base consolidada";
+    if (selectedYear !== "Todos" && selectedMonth !== "Todos") effectivePeriod = `${selectedYear} · ${selectedMonthLabel}`;
+    else if (selectedYear !== "Todos") effectivePeriod = `${selectedYear} · ${periodMonths.map((value) => months[value - 1] || value).join(", ") || "sem mês"}`;
+    else if (selectedMonth !== "Todos") effectivePeriod = `${periodYears.join(", ") || "Ano não identificado"} · ${selectedMonthLabel}`;
+    else if (periodYears.length === 1 && periodMonths.length === 1) effectivePeriod = `${periodYears[0]} · ${months[periodMonths[0] - 1] || periodMonths[0]}`;
     const filterLabel = getActiveFilterLabel();
     const withinAngle = (value) => value != null && value >= LIMITS.angleMin && value <= LIMITS.angleMax;
     const withinAz = (value) => value != null && Math.abs(value) <= LIMITS.azimuth;
@@ -331,9 +345,9 @@ async function exportToXlsx(btn = document.getElementById("export-xlsx")) {
     workbook.modified = now;
 
     const summary = workbook.addWorksheet("Resumo");
-    excelCleanReportHeader(summary, "Relatório de Desvios de Perfuração", `ENAEX · gerado em ${dataStr} · ${filterLabel}`, 4);
+    excelCleanReportHeader(summary, "Relatório de Desvios de Perfuração", `ENAEX · gerado em ${dataStr} · Período efetivo: ${effectivePeriod} · ${filterLabel}`, 4);
     summary.mergeCells(4, 1, 4, 4); summary.getCell(4, 1).value = "Identificação e seleção exportada"; excelCleanStyleSection(summary.getRow(4), 4);
-    summary.addRows([["Gerado em", dataStr, "", ""], ["Ano selecionado", selectedYear, "", ""], ["Mês selecionado", selectedMonthLabel, "", ""], ["Filtro aplicado", filterLabel, "", ""]]);
+    summary.addRows([["Gerado em", dataStr, "", ""], ["Ano selecionado", selectedYear, "", ""], ["Mês selecionado", selectedMonthLabel, "", ""], ["Período efetivo", effectivePeriod, "Filtro aplicado", filterLabel]]);
     summary.mergeCells(9, 1, 9, 4); summary.getCell(9, 1).value = "Indicadores de aderência"; excelCleanStyleSection(summary.getRow(9), 4);
     summary.addRows([
       ["Furos analisados", metrics.total, "—", "Registros incluídos no período/filtro"],
@@ -351,7 +365,7 @@ async function exportToXlsx(btn = document.getElementById("export-xlsx")) {
     summary.pageSetup = { orientation: "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 1 };
 
     const dataSheet = workbook.addWorksheet("Desvios");
-    excelCleanReportHeader(dataSheet, "Base calculada · Desvios de perfuração", `Período/seleção atual · ${data.length} furo(s) · ${filterLabel}`, headers.length);
+    excelCleanReportHeader(dataSheet, "Base calculada · Desvios de perfuração", `Período efetivo: ${effectivePeriod} · ${data.length} furo(s) · ${filterLabel}`, headers.length);
     dataSheet.mergeCells(4, 1, 4, headers.length); dataSheet.getCell(4, 1).value = "Base completa dos furos filtrados · use os filtros do cabeçalho para conferência"; excelCleanStyleSection(dataSheet.getRow(4), headers.length);
     dataSheet.getRow(5).values = headers; excelCleanStyleHeader(dataSheet.getRow(5)); rows.forEach((row) => dataSheet.addRow(headers.map((header) => row[header])));
     excelCleanStyleRows(dataSheet, 6, 5 + rows.length, headers.length);
@@ -365,7 +379,7 @@ async function exportToXlsx(btn = document.getElementById("export-xlsx")) {
     dataSheet.pageSetup = { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
 
     const chartsSheet = workbook.addWorksheet("Gráficos");
-    excelCleanReportHeader(chartsSheet, "Gráficos do período selecionado", `Oito gráficos nativos e editáveis do Excel · ${data.length} furo(s) · ${filterLabel}`, 18);
+    excelCleanReportHeader(chartsSheet, "Gráficos do período selecionado", `Período efetivo: ${effectivePeriod} · Oito gráficos nativos e editáveis do Excel · ${data.length} furo(s) · ${filterLabel}`, 18);
     chartsSheet.mergeCells(4, 1, 4, 18); chartsSheet.getCell(4, 1).value = "PAINEL ANALÍTICO · clique em qualquer gráfico para editar séries, cores e eixos"; excelCleanStyleSection(chartsSheet.getRow(4), 18);
     for (let column = 1; column <= 18; column += 1) chartsSheet.getColumn(column).width = 11.5;
     for (let row = 5; row <= 75; row += 1) chartsSheet.getRow(row).height = 18;
@@ -387,4 +401,3 @@ async function exportToXlsx(btn = document.getElementById("export-xlsx")) {
     if (btn) btn.textContent = originalLabel;
   } finally { if (btn) btn.disabled = false; }
 }
-
