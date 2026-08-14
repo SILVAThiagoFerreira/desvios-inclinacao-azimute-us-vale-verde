@@ -262,43 +262,74 @@ async function addNativeExcelChartsClean(buffer, refs, chartSheetId) {
   };
   const chartXml = (def) => {
     const kind = def.type === "line" ? "lineChart" : def.type === "scatter" ? "scatterChart" : "barChart";
-    const plot = def.type === "scatter" ? `<c:scatterStyle val="marker"/>` : def.type === "bar" ? `<c:barDir val="col"/><c:grouping val="clustered"/><c:overlap val="0"/><c:gapWidth val="55"/>` : `<c:grouping val="standard"/><c:marker val="1"/>`;
+    const plot = def.type === "scatter"
+      ? `<c:scatterStyle val="marker"/><c:varyColors val="0"/>`
+      : def.type === "bar"
+        ? `<c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>`
+        : `<c:grouping val="standard"/><c:varyColors val="0"/>`;
     const series = def.series.map((item, index) => {
       const dataRef = ref(item.column, item.start, item.end);
       const dimensions = def.type === "scatter"
         ? `<c:xVal><c:numRef><c:f>${ref(def.x[0], def.x[1], def.x[2])}</c:f></c:numRef></c:xVal><c:yVal><c:numRef><c:f>${dataRef}</c:f></c:numRef></c:yVal>`
         : `<c:cat><c:strRef><c:f>${ref(def.cat[0], def.cat[1], def.cat[2])}</c:f></c:strRef></c:cat><c:val><c:numRef><c:f>${dataRef}</c:f></c:numRef></c:val>`;
       const marker = def.type === "scatter" ? `<c:marker><c:symbol val="circle"/><c:size val="5"/><c:spPr>${solid(item.color)}<a:ln><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></a:ln></c:spPr></c:marker>` : "";
-      return `<c:ser><c:idx val="${index}"/><c:order val="${index}"/>${textXml(item.name)}${dimensions}${marker}${seriesSpPr(item, def.type)}</c:ser>`;
+      return `<c:ser><c:idx val="${index}"/><c:order val="${index}"/>${textXml(item.name)}${seriesSpPr(item, def.type)}${marker}${dimensions}</c:ser>`;
     }).join("");
     const axes = `<c:axId val="10"/><c:axId val="11"/>`;
+    const plotTail = def.type === "bar" ? `<c:gapWidth val="55"/><c:overlap val="0"/>` : def.type === "line" ? `<c:marker val="1"/>` : "";
     const legend = def.series.length > 1 ? `<c:legend><c:legendPos val="b"/><c:layout/><c:overlay val="0"/></c:legend>` : "";
-    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><c:chartSpace xmlns:c="${cns}" xmlns:a="${ns}"><c:date1904 val="0"/><c:lang val="pt-BR"/><c:roundedCorners val="0"/>${chartSpPr}<c:chart><c:autoTitleDeleted val="0"/>${textXml(def.title, 1400, true)}<c:plotArea><c:layout/><c:${kind}>${plot}<c:varyColors val="0"/>${series}${axes}</c:${kind}>${axesXml(def)}</c:plotArea>${legend}<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart></c:chartSpace>`;
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><c:chartSpace xmlns:c="${cns}" xmlns:a="${ns}"><c:date1904 val="0"/><c:lang val="pt-BR"/><c:roundedCorners val="0"/><c:chart><c:autoTitleDeleted val="0"/>${textXml(def.title, 1400, true)}<c:plotArea><c:layout/><c:${kind}>${plot}${series}${plotTail}${axes}</c:${kind}>${axesXml(def)}</c:plotArea>${legend}<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart>${chartSpPr}</c:chartSpace>`;
   };
 
-  const drawings = zip.file(/xl\/drawings\/drawing\d+\.xml/).map((entry) => Number((entry.name.match(/drawing(\d+)\.xml$/) || [])[1])).filter(Number.isFinite);
-  const drawingIndex = drawings.length ? Math.max(...drawings) + 1 : 1;
-  const drawingName = `drawing${drawingIndex}.xml`;
   const chartRelType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart";
   const drawingRelType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing";
-  const anchors = defs.map((_, index) => `<xdr:twoCellAnchor editAs="oneCell"><xdr:from><xdr:col>${(index % 2) * 9}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${Math.floor(index / 2) * 18 + 4}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:to><xdr:col>${(index % 2) * 9 + 8}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${Math.floor(index / 2) * 18 + 20}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to><xdr:graphicFrame><xdr:nvGraphicFramePr><xdr:cNvPr id="${100 + index}" name="Gráfico nativo ${index + 1}"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="${cns}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId${index + 1}"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor>`).join("");
-  zip.file(`xl/drawings/${drawingName}`, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="${ns}">${anchors}</xdr:wsDr>`);
-  zip.file(`xl/drawings/_rels/${drawingName}.rels`, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${defs.map((_, index) => `<Relationship Id="rId${index + 1}" Type="${chartRelType}" Target="../charts/chart${index + 1}.xml"/>`).join("")}</Relationships>`);
   defs.forEach((definition, index) => zip.file(`xl/charts/chart${index + 1}.xml`, chartXml(definition)));
 
   const worksheetPath = `xl/worksheets/sheet${chartSheetId}.xml`;
   const relsPath = `xl/worksheets/_rels/sheet${chartSheetId}.xml.rels`;
-  let rels = zip.file(relsPath) ? await zip.file(relsPath).async("string") : `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>`;
-  const relNumbers = [...rels.matchAll(/Id="rId(\d+)"/g)].map((match) => Number(match[1])).filter(Number.isFinite);
-  const drawingRelId = `rId${relNumbers.length ? Math.max(...relNumbers) + 1 : 1}`;
-  rels = rels.replace("</Relationships>", `<Relationship Id="${drawingRelId}" Type="${drawingRelType}" Target="../drawings/${drawingName}"/></Relationships>`);
-  zip.file(relsPath, rels);
   let worksheet = await zip.file(worksheetPath).async("string");
-  if (!worksheet.includes("<drawing ")) worksheet = worksheet.replace("</worksheet>", `<drawing xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="${drawingRelId}"/></worksheet>`);
+  let rels = zip.file(relsPath) ? await zip.file(relsPath).async("string") : `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>`;
+  const drawingElement = worksheet.match(/<drawing\b[^>]*r:id="([^"]+)"[^>]*\/\s*>/);
+  const existingDrawingRelId = drawingElement ? drawingElement[1] : null;
+  const drawingRelationship = existingDrawingRelId
+    ? [...rels.matchAll(/<Relationship\b[^>]*\/\s*>/g)].map((match) => match[0]).find((entry) => entry.includes(`Id="${existingDrawingRelId}"`) && entry.includes(`Type="${drawingRelType}"`))
+    : null;
+  const drawingTarget = drawingRelationship?.match(/Target="([^"]+)"/)?.[1];
+  const existingDrawingPath = drawingTarget ? `xl/${drawingTarget.replace(/^(\.\.\/)+/, "")}` : null;
+  let drawingName = existingDrawingPath?.startsWith("xl/drawings/") ? existingDrawingPath.slice("xl/drawings/".length) : null;
+  if (drawingName && !zip.file(existingDrawingPath)) drawingName = null;
+  if (existingDrawingRelId && !drawingName) throw new Error("Não foi possível localizar o desenho da aba de gráficos.");
+
+  const allDrawingIndexes = zip.file(/xl\/drawings\/drawing\d+\.xml/).map((entry) => Number((entry.name.match(/drawing(\d+)\.xml$/) || [])[1])).filter(Number.isFinite);
+  if (!drawingName) drawingName = `drawing${allDrawingIndexes.length ? Math.max(...allDrawingIndexes) + 1 : 1}.xml`;
+  const drawingPath = `xl/drawings/${drawingName}`;
+  const drawingRelsPath = `xl/drawings/_rels/${drawingName}.rels`;
+  let drawingXml = zip.file(drawingPath) ? await zip.file(drawingPath).async("string") : `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="${ns}"></xdr:wsDr>`;
+  let drawingRels = zip.file(drawingRelsPath) ? await zip.file(drawingRelsPath).async("string") : `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>`;
+  const drawingRelNumbers = [...drawingRels.matchAll(/Id="rId(\d+)"/g)].map((match) => Number(match[1])).filter(Number.isFinite);
+  const chartRelStart = drawingRelNumbers.length ? Math.max(...drawingRelNumbers) + 1 : 1;
+  const frameIds = [...drawingXml.matchAll(/<xdr:cNvPr\b[^>]*\bid="(\d+)"/g)].map((match) => Number(match[1])).filter(Number.isFinite);
+  const frameIdStart = frameIds.length ? Math.max(...frameIds) + 1 : 100;
+  const anchorXml = (index) => {
+    const chartRelId = `rId${chartRelStart + index}`;
+    return `<xdr:twoCellAnchor editAs="oneCell"><xdr:from><xdr:col>${(index % 2) * 9}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${Math.floor(index / 2) * 18 + 4}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:to><xdr:col>${(index % 2) * 9 + 8}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${Math.floor(index / 2) * 18 + 20}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to><xdr:graphicFrame><xdr:nvGraphicFramePr><xdr:cNvPr id="${frameIdStart + index}" name="Gráfico nativo ${index + 1}"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="${cns}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="${chartRelId}"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor>`;
+  };
+  drawingXml = drawingXml.replace("</xdr:wsDr>", `${defs.map((_, index) => anchorXml(index)).join("")}</xdr:wsDr>`);
+  drawingRels = drawingRels.replace("</Relationships>", `${defs.map((_, index) => `<Relationship Id="rId${chartRelStart + index}" Type="${chartRelType}" Target="../charts/chart${index + 1}.xml"/>`).join("")}</Relationships>`);
+  zip.file(drawingPath, drawingXml);
+  zip.file(drawingRelsPath, drawingRels);
+  if (!existingDrawingRelId) {
+    const sheetRelNumbers = [...rels.matchAll(/Id="rId(\d+)"/g)].map((match) => Number(match[1])).filter(Number.isFinite);
+    const drawingRelId = `rId${sheetRelNumbers.length ? Math.max(...sheetRelNumbers) + 1 : 1}`;
+    rels = rels.replace("</Relationships>", `<Relationship Id="${drawingRelId}" Type="${drawingRelType}" Target="../drawings/${drawingName}"/></Relationships>`);
+    worksheet = worksheet.replace("</worksheet>", `<drawing xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="${drawingRelId}"/></worksheet>`);
+  }
+  zip.file(relsPath, rels);
   zip.file(worksheetPath, worksheet);
   let contentTypes = await zip.file("[Content_Types].xml").async("string");
-  const chartOverrides = defs.map((_, index) => `<Override PartName="/xl/charts/chart${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>`).join("");
-  contentTypes = contentTypes.replace("</Types>", chartOverrides + `<Override PartName="/xl/drawings/${drawingName}" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>`);
+  const chartOverrides = defs.map((_, index) => contentTypes.includes(`PartName="/xl/charts/chart${index + 1}.xml"`) ? "" : `<Override PartName="/xl/charts/chart${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>`).join("");
+  const drawingOverride = contentTypes.includes(`PartName="/xl/drawings/${drawingName}"`) ? "" : `<Override PartName="/xl/drawings/${drawingName}" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>`;
+  contentTypes = contentTypes.replace("</Types>", chartOverrides + drawingOverride + "</Types>");
   zip.file("[Content_Types].xml", contentTypes);
   let workbookXml = await zip.file("xl/workbook.xml").async("string");
   if (workbookXml.includes("<calcPr")) workbookXml = workbookXml.replace(/<calcPr[^>]*\/>/, `<calcPr calcId="191029" calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1"/>`);
