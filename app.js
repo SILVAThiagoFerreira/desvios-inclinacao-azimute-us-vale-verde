@@ -11,6 +11,7 @@
 const SHEET_ID = "1ef7edY0Yye6arldVfOUYDcjI4GvY6g5U";
 const GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&headers=1`;
 const CSV_URL  = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
+const DXF_INDEX_GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?sheet=DXF_INDEX&tqx=out:json&headers=1`;
 
 const LIMITS = {
   angleMin: 11.8, angleMax: 18.2, angleExpected: 15, angleTol: 3.2,
@@ -1419,13 +1420,51 @@ function getActiveFilterLabel() {
 }
 
 /* ===================== Mapa de execução (DXF) ===================== */
-/* A planilha fornece os dados dos furos; a geometria do mapa vem de um DXF
-   versionado em ./data/<PLANO>.dxf. O manifesto evita 404 para planos que
-   chegaram à planilha antes de o respectivo desenho ser disponibilizado. */
+/* A planilha fornece os dados dos furos. O índice DXF_INDEX, sincronizado
+   automaticamente a partir da pasta pública do Drive, fornece o file_id e
+   a data da geometria. O caminho local permanece como fallback de segurança. */
 
 const DXF_CACHE = new Map();   // plano -> Promise<holes | null>
 const DXF_MISS = new Set();    // planos sem DXF (evita re-tentar)
 let DXF_MANIFEST_PROMISE = null;
+let DXF_INDEX_PROMISE = null;
+
+async function loadDxfIndex() {
+  if (!DXF_INDEX_PROMISE) {
+    DXF_INDEX_PROMISE = fetch(DXF_INDEX_GVIZ_URL, { cache: "no-store" })
+      .then(async (res) => res.ok ? parseGviz(await res.text()) : null)
+      .then((table) => {
+        const index = new Map();
+        if (!table || !Array.isArray(table.cols) || !Array.isArray(table.rows)) return index;
+        const colIndex = {};
+        table.cols.forEach((col, i) => { colIndex[norm(col.label)] = i; });
+        const getIndex = (...names) => names.map(norm).map((name) => colIndex[name]).find((i) => i !== undefined);
+        const planIndex = getIndex("PLANO", "PLAN");
+        const fileIdIndex = getIndex("FILE_ID", "ID ARQUIVO", "ID");
+        const urlIndex = getIndex("URL_DOWNLOAD", "URL DXF", "URL");
+        const updatedIndex = getIndex("ATUALIZADO_EM", "ATUALIZADO", "MODIFICADO_EM");
+        const statusIndex = getIndex("STATUS");
+        if (planIndex === undefined) return index;
+        const value = (row, i) => i === undefined ? "" : String(row.c?.[i]?.v ?? "").trim();
+        table.rows.forEach((row) => {
+          const plan = value(row, planIndex);
+          const fileId = value(row, fileIdIndex);
+          const directUrl = value(row, urlIndex);
+          if (!plan || (!fileId && !directUrl)) return;
+          const status = value(row, statusIndex).toUpperCase();
+          if (status && status !== "OK") return;
+          const url = directUrl || `https://drive.usercontent.google.com/download?id=${encodeURIComponent(fileId)}&export=download`;
+          index.set(plan, { url, fileId, updatedAt: value(row, updatedIndex) });
+        });
+        return index;
+      })
+      .catch((e) => {
+        console.warn("índice DXF remoto indisponível, usando fallback local:", e);
+        return new Map();
+      });
+  }
+  return DXF_INDEX_PROMISE;
+}
 
 async function loadDxfManifest() {
   if (!DXF_MANIFEST_PROMISE) {
@@ -1441,6 +1480,21 @@ async function fetchDxfHoles(plano) {
   if (DXF_MISS.has(plano)) return null;
   if (DXF_CACHE.has(plano)) return DXF_CACHE.get(plano);
   const promise = (async () => {
+    const remoteIndex = await loadDxfIndex();
+    const remote = remoteIndex.get(plano);
+    if (remote) {
+      try {
+        const url = new URL(remote.url);
+        if (remote.updatedAt) url.searchParams.set("v", remote.updatedAt);
+        const res = await fetch(url.toString(), { cache: "no-store" });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const holes = parseDxfHoles(await res.text());
+        if (holes.length) return holes;
+        throw new Error("DXF remoto sem geometria válida");
+      } catch (e) {
+        console.warn(`DXF remoto indisponível para ${plano}, tentando fallback local:`, e);
+      }
+    }
     try {
       const manifest = await loadDxfManifest();
       if (manifest && !manifest.has(plano)) {
