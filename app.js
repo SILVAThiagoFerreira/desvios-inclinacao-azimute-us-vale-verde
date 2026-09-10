@@ -12,6 +12,10 @@ const SHEET_ID = "1ef7edY0Yye6arldVfOUYDcjI4GvY6g5U";
 const GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&headers=1`;
 const CSV_URL  = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
 const DXF_INDEX_GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?sheet=DXF_INDEX&tqx=out:json&headers=1`;
+// Apps Script proxy: Drive download responses do not expose CORS headers to
+// GitHub Pages, so the browser cannot read a newly added DXF directly.
+const DXF_PROXY_URL = "https://script.google.com/macros/s/AKfycbxMfvutG2Hu4i2tbXp3idLte-xtad33stWV-JSpHzlJMQ4zhFCMV0rUTPc474Z-8j1UwA/exec";
+const DXF_REFRESH_MS = 30_000;
 
 const LIMITS = {
   angleMin: 11.8, angleMax: 18.2, angleExpected: 15, angleTol: 3.2,
@@ -1428,14 +1432,23 @@ const DXF_CACHE = new Map();   // plano -> Promise<holes | null>
 const DXF_MISS = new Set();    // planos sem DXF (evita re-tentar)
 let DXF_MANIFEST_PROMISE = null;
 let DXF_INDEX_PROMISE = null;
+let DXF_INDEX_LAST = new Map();
+let DXF_INDEX_SIGNATURE = "";
+let DXF_REFRESH_TIMER = null;
+let DXF_REFRESH_IN_FLIGHT = false;
 
-async function loadDxfIndex() {
+async function loadDxfIndex(force = false) {
+  if (force) DXF_INDEX_PROMISE = null;
   if (!DXF_INDEX_PROMISE) {
-    DXF_INDEX_PROMISE = fetch(DXF_INDEX_GVIZ_URL, { cache: "no-store" })
+    const url = new URL(DXF_INDEX_GVIZ_URL);
+    // no-store controls the browser cache, while this query parameter also
+    // prevents an intermediary Google response from returning an old table.
+    url.searchParams.set("_", Date.now().toString());
+    DXF_INDEX_PROMISE = fetch(url.toString(), { cache: "no-store" })
       .then(async (res) => res.ok ? parseGviz(await res.text()) : null)
       .then((table) => {
         const index = new Map();
-        if (!table || !Array.isArray(table.cols) || !Array.isArray(table.rows)) return index;
+        if (!table || !Array.isArray(table.cols) || !Array.isArray(table.rows)) return DXF_INDEX_LAST;
         const colIndex = {};
         table.cols.forEach((col, i) => { colIndex[norm(col.label)] = i; });
         const getIndex = (...names) => names.map(norm).map((name) => colIndex[name]).find((i) => i !== undefined);
@@ -1444,7 +1457,7 @@ async function loadDxfIndex() {
         const urlIndex = getIndex("URL_DOWNLOAD", "URL DXF", "URL");
         const updatedIndex = getIndex("ATUALIZADO_EM", "ATUALIZADO", "MODIFICADO_EM");
         const statusIndex = getIndex("STATUS");
-        if (planIndex === undefined) return index;
+        if (planIndex === undefined) return DXF_INDEX_LAST;
         const value = (row, i) => i === undefined ? "" : String(row.c?.[i]?.v ?? "").trim();
         table.rows.forEach((row) => {
           const plan = value(row, planIndex);
@@ -1456,11 +1469,21 @@ async function loadDxfIndex() {
           const url = directUrl || `https://drive.usercontent.google.com/download?id=${encodeURIComponent(fileId)}&export=download`;
           index.set(plan, { url, fileId, updatedAt: value(row, updatedIndex) });
         });
+        const signature = [...index.entries()]
+          .map(([plan, item]) => `${plan}|${item.fileId}|${item.updatedAt}|${item.url}`)
+          .sort()
+          .join("\n");
+        if (DXF_INDEX_SIGNATURE && signature !== DXF_INDEX_SIGNATURE) {
+          DXF_CACHE.clear();
+          DXF_MISS.clear();
+        }
+        DXF_INDEX_SIGNATURE = signature;
+        DXF_INDEX_LAST = index;
         return index;
       })
       .catch((e) => {
         console.warn("índice DXF remoto indisponível, usando fallback local:", e);
-        return new Map();
+        return DXF_INDEX_LAST;
       });
   }
   return DXF_INDEX_PROMISE;
@@ -1483,16 +1506,28 @@ async function fetchDxfHoles(plano) {
     const remoteIndex = await loadDxfIndex();
     const remote = remoteIndex.get(plano);
     if (remote) {
-      try {
-        const url = new URL(remote.url);
-        if (remote.updatedAt) url.searchParams.set("v", remote.updatedAt);
-        const res = await fetch(url.toString(), { cache: "no-store" });
-        if (!res.ok) throw new Error("HTTP " + res.status);
-        const holes = parseDxfHoles(await res.text());
-        if (holes.length) return holes;
-        throw new Error("DXF remoto sem geometria válida");
-      } catch (e) {
-        console.warn(`DXF remoto indisponível para ${plano}, tentando fallback local:`, e);
+      const urls = [];
+      if (DXF_PROXY_URL && !DXF_PROXY_URL.includes("PLACEHOLDER") && remote.fileId) {
+        const proxy = new URL(DXF_PROXY_URL);
+        proxy.searchParams.set("id", remote.fileId);
+        if (remote.updatedAt) proxy.searchParams.set("v", remote.updatedAt);
+        urls.push(proxy);
+      }
+      if (remote.url) {
+        const direct = new URL(remote.url);
+        if (remote.updatedAt) direct.searchParams.set("v", remote.updatedAt);
+        urls.push(direct);
+      }
+      for (const url of urls) {
+        try {
+          const res = await fetch(url.toString(), { cache: "no-store" });
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          const holes = parseDxfHoles(await res.text());
+          if (holes.length) return holes;
+          throw new Error("DXF remoto sem geometria válida");
+        } catch (e) {
+          console.warn(`DXF remoto indisponível para ${plano} em ${url.host}, tentando próxima origem:`, e);
+        }
       }
     }
     try {
@@ -1512,6 +1547,25 @@ async function fetchDxfHoles(plano) {
   })();
   DXF_CACHE.set(plano, promise);
   return promise;
+}
+
+async function refreshDxfIndexIfChanged() {
+  if (DXF_REFRESH_IN_FLIGHT) return;
+  DXF_REFRESH_IN_FLIGHT = true;
+  try {
+    const before = DXF_INDEX_SIGNATURE;
+    await loadDxfIndex(true);
+    if (before !== DXF_INDEX_SIGNATURE) await drawMap();
+  } finally {
+    DXF_REFRESH_IN_FLIGHT = false;
+  }
+}
+
+function startDxfAutoRefresh() {
+  if (DXF_REFRESH_TIMER) return;
+  DXF_REFRESH_TIMER = setInterval(() => {
+    refreshDxfIndexIfChanged().catch((e) => console.warn("atualização automática dos DXFs falhou:", e));
+  }, DXF_REFRESH_MS);
 }
 
 /* Parser DXF minimalista.
@@ -1788,4 +1842,6 @@ function niceStep(raw) {
 }
 
 /* ===================== Boot ===================== */
-loadSheet().catch((e) => console.error(e));
+loadSheet()
+  .then(() => startDxfAutoRefresh())
+  .catch((e) => console.error(e));

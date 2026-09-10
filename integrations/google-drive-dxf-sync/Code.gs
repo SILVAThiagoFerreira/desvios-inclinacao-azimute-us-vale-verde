@@ -6,6 +6,39 @@ const CONFIG = {
 
 const PLAN_ALIASES = { PC53: "PP53" };
 
+function textResponse(text) {
+  return ContentService.createTextOutput(text).setMimeType(ContentService.MimeType.TEXT);
+}
+
+/*
+ * CORS-safe DXF reader for the static GitHub Pages dashboard.
+ * Only files that are direct children of the configured DXF folder can be
+ * read, so this endpoint is not an open Drive proxy.
+ */
+function doGet(e) {
+  const fileId = String((e && e.parameter && e.parameter.id) || "").trim();
+  if (!/^[A-Za-z0-9_-]{20,}$/.test(fileId)) return textResponse("DXF id inválido");
+
+  try {
+    const file = DriveApp.getFileById(fileId);
+    const name = file.getName().trim();
+    if (!/\.dxf$/i.test(name)) return textResponse("Arquivo não permitido");
+
+    const parents = file.getParents();
+    let isAllowed = false;
+    while (parents.hasNext()) {
+      if (parents.next().getId() === CONFIG.folderId) {
+        isAllowed = true;
+        break;
+      }
+    }
+    if (!isAllowed) return textResponse("Arquivo fora da pasta configurada");
+    return textResponse(file.getBlob().getDataAsString());
+  } catch (error) {
+    return textResponse("Não foi possível ler o DXF");
+  }
+}
+
 function setup() {
   syncDxfIndex();
   ScriptApp.getProjectTriggers()
