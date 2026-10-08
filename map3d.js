@@ -157,7 +157,8 @@ function main() {
   const applyView = () => {
     if (!home) return;
     if (viewMode === "top") {
-      // Trava a elevação em 90° (vista de cima); o giro horizontal continua livre
+      // Planta é 2D: sem giro (botões esquerdo, direito e toque), só mover e aproximar
+      controls.enableRotate = false;
       controls.minPolarAngle = 0;
       controls.maxPolarAngle = 0;
       const R = home.R;
@@ -165,6 +166,7 @@ function main() {
       controls.target.copy(home.target);
       controls.update();
     } else {
+      controls.enableRotate = true;
       controls.minPolarAngle = 0;
       controls.maxPolarAngle = Math.PI;
       resetView();
