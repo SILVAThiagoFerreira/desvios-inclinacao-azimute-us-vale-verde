@@ -437,6 +437,26 @@ function main() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  // Mediana da distância, em planta, entre cada emboque e o mais próximo dele
+  function medianCollarSpacing(holes) {
+    const pts = [];
+    holes.forEach((h) => {
+      const c = h.collar || (h.planned && h.planned[0]) || (h.real && h.real[0]);
+      if (c && Number.isFinite(c.x) && Number.isFinite(c.y)) pts.push(c);
+    });
+    if (pts.length < 2) return Infinity;
+    const nearest = pts.map((p, i) => {
+      let best = Infinity;
+      for (let j = 0; j < pts.length; j++) {
+        if (j === i) continue;
+        const d = Math.hypot(p.x - pts[j].x, p.y - pts[j].y);
+        if (d < best) best = d;
+      }
+      return best;
+    }).filter(Number.isFinite).sort((a, b) => a - b);
+    return nearest[Math.floor(nearest.length / 2)] || Infinity;
+  }
+
   // ---------- Construção da cena ----------
   function build(all, { keepView = false } = {}) {
     clearGroups();
@@ -477,7 +497,10 @@ function main() {
 
     const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, cz = (minZ + maxZ) / 2;
     const extent = Math.max(maxX - minX, maxY - minY, 1);
-    const rad = Math.max(extent * 0.0022, 0.15);
+    // Espessura pelo espaçamento real entre emboques (não pela extensão total),
+    // para que furos vizinhos não se sobreponham por causa da grossura
+    const spacing = medianCollarSpacing(holes);
+    const rad = Math.max(Math.min(extent * 0.0022, spacing * 0.25), 0.04);
     radius = rad;
     // Planta (x, y) vira o plano XZ da cena; Y da cena é a cota (z) com exagero.
     const toWorld = (p) => new THREE.Vector3(p.x - cx, (p.z - cz) * exag, -(p.y - cy));
@@ -558,7 +581,7 @@ function main() {
     if (collars.length) {
       const holeOf = [];
       const sphereMesh = new THREE.InstancedMesh(
-        new THREE.SphereGeometry(rad * 1.6, 10, 8),
+        new THREE.SphereGeometry(rad * 1.3, 10, 8),
         new THREE.MeshStandardMaterial({ color: COLORS.collar, roughness: 0.4 }),
         collars.length,
       );
