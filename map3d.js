@@ -157,10 +157,10 @@ function main() {
   const applyView = () => {
     if (!home) return;
     if (viewMode === "top") {
-      // Planta: continua de cima (2D). Só o botão direito gira em torno do eixo
-      // vertical; o do meio move; a roda aproxima. Esquerdo não faz nada aqui.
+      // Planta: continua de cima (2D). Esquerdo e meio movem a visualização;
+      // o direito gira em torno do eixo vertical; a roda aproxima.
       controls.enableRotate = true;
-      controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE };
+      controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE };
       controls.minPolarAngle = 0;
       controls.maxPolarAngle = 0;
       const R = home.R;
