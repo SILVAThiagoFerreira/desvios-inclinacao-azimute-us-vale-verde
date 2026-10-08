@@ -32,7 +32,19 @@ function main() {
   const layerInputs = [...document.querySelectorAll("input[data-map3d-layer]")];
   const viewBtns = [...document.querySelectorAll("[data-map3d-view]")];
   const hideBtn = document.getElementById("map3d-hide");
+  const menuEl = document.getElementById("map3d-menu");
+  const dxfBtn = document.getElementById("map3d-dxf");
   if (!root || !statusEl) return;
+
+  // Chave estável de cada furo (plano + ID; sem ID, usa a posição do emboque)
+  function keyOf(h) {
+    if (h.id) return `${h.plano}|${h.id}`;
+    const p = h.collar || (h.planned && h.planned[0]) || (h.real && h.real[0]);
+    return p ? `${h.plano}|@${p.x},${p.y},${p.z}` : null;
+  }
+  const hiddenKeys = new Set();
+  let drawnHoles = [];
+  let menuHoleIdx = null;
 
   const UP = new THREE.Vector3(0, 1, 0);
   let renderer, scene, camera, controls, home = null;
@@ -240,7 +252,7 @@ function main() {
   };
 
   function selectHole(hi) {
-    const hole = current[hi];
+    const hole = drawnHoles[hi];
     if (!hole) return;
     const anchor = anchors[hi];
     if (anchor) {
@@ -251,20 +263,85 @@ function main() {
     showInfo(hole);
   }
 
-  // Clique (sem arrastar) com o botão esquerdo escolhe o furo mais próximo
+  // Clique (sem arrastar): esquerdo mostra detalhes; direito abre o menu do furo
   let downAt = null;
   dom.addEventListener("pointerdown", (e) => {
-    downAt = e.button === 0 ? { x: e.clientX, y: e.clientY } : null;
+    downAt = e.button === 0 || e.button === 2 ? { button: e.button, x: e.clientX, y: e.clientY } : null;
   });
   dom.addEventListener("pointerup", (e) => {
     if (!downAt) return;
-    const moved = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y);
+    const { button, x, y } = downAt;
     downAt = null;
-    if (moved > 4) return;
-    pick(e);
+    if (Math.hypot(e.clientX - x, e.clientY - y) > 4) return;
+    if (button === 0) {
+      closeMenu();
+      pick(e);
+    } else {
+      openMenu(e);
+    }
   });
 
-  function pick(e) {
+  // ---------- Menu do botão direito ----------
+  function closeMenu() {
+    if (!menuEl) return;
+    menuEl.hidden = true;
+    menuEl.replaceChildren();
+    menuHoleIdx = null;
+  }
+
+  function openMenu(e) {
+    const hi = hitHole(e);
+    if (hi == null) {
+      closeMenu();
+      return;
+    }
+    menuHoleIdx = hi;
+    const hole = drawnHoles[hi];
+    const head = document.createElement("div");
+    head.className = "map3d-menu__head";
+    head.textContent = `Furo ${hole.id || "s/ ID"} · ${hole.plano || ""}`;
+    const hideOne = document.createElement("button");
+    hideOne.type = "button";
+    hideOne.setAttribute("role", "menuitem");
+    hideOne.textContent = "Ocultar este furo";
+    hideOne.addEventListener("click", () => {
+      const k = keyOf(hole);
+      if (k) hiddenKeys.add(k);
+      closeMenu();
+      build(current, { keepView: true });
+    });
+    const items = [head, hideOne];
+    if (hiddenKeys.size) {
+      const showAll = document.createElement("button");
+      showAll.type = "button";
+      showAll.setAttribute("role", "menuitem");
+      showAll.textContent = `Mostrar furos ocultos (${hiddenKeys.size})`;
+      showAll.addEventListener("click", () => {
+        hiddenKeys.clear();
+        closeMenu();
+        build(current, { keepView: true });
+      });
+      items.push(showAll);
+    }
+    menuEl.replaceChildren(...items);
+    menuEl.hidden = false;
+
+    // Posiciona o menu no ponto do clique, dentro do cartão 3D
+    const box = menuEl.parentElement.getBoundingClientRect();
+    const mw = menuEl.offsetWidth, mh = menuEl.offsetHeight;
+    const left = Math.min(e.clientX - box.left, box.width - mw - 8);
+    const top = Math.min(e.clientY - box.top, box.height - mh - 8);
+    menuEl.style.left = `${Math.max(8, left)}px`;
+    menuEl.style.top = `${Math.max(8, top)}px`;
+  }
+
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenu(); });
+  document.addEventListener("pointerdown", (e) => {
+    if (menuEl && !menuEl.hidden && !menuEl.contains(e.target)) closeMenu();
+  });
+
+  // Índice do furo (em drawnHoles) sob o ponteiro, ou null
+  function hitHole(e) {
     const rect = dom.getBoundingClientRect();
     pointer.set(
       ((e.clientX - rect.left) / rect.width) * 2 - 1,
@@ -280,22 +357,99 @@ function main() {
       });
     });
     const hits = raycaster.intersectObjects(candidates.map((c) => c.mesh), false);
-    if (!hits.length) {
+    if (!hits.length) return null;
+    const hit = hits[0];
+    const entry = candidates.find((c) => c.mesh === hit.object);
+    return entry?.holeOf[hit.instanceId] ?? null;
+  }
+
+  function pick(e) {
+    const hi = hitHole(e);
+    if (hi == null) {
       closeInfo();
       return;
     }
-    const hit = hits[0];
-    const entry = candidates.find((c) => c.mesh === hit.object);
-    const hi = entry?.holeOf[hit.instanceId];
-    if (hi == null) return;
     selectHole(hi);
   }
 
+  // ---------- Exportação DXF ----------
+  // Mesmas camadas que o mapa 2D lê dos DXFs: HOLE (emboque), THEORETICAL HOLE
+  // (planejado), REAL HOLE (executado) e NUMBER (ID). Coordenadas originais.
+  function buildDxf(holes) {
+    const out = [];
+    const g = (code, value) => out.push(String(code), String(value));
+    const num = (v) => (Number.isFinite(v) ? v : 0).toFixed(4);
+    const pt = (code, p) => { g(10, num(p.x)); g(20, num(p.y)); g(30, num(p.z)); };
+    const layers = ["HOLE", "THEORETICAL HOLE", "REAL HOLE", "NUMBER"];
+
+    // Altura do texto proporcional ao tamanho do conjunto
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    holes.forEach((h) => [h.collar, ...(h.planned || []), ...(h.real || [])].forEach((p) => {
+      if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return;
+      minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+      minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+    }));
+    const textH = Math.max(0.5, (Math.max(maxX - minX, maxY - minY, 1)) * 0.008);
+
+    g(0, "SECTION"); g(2, "HEADER"); g(9, "$ACADVER"); g(1, "AC1009"); g(0, "ENDSEC");
+    g(0, "SECTION"); g(2, "TABLES");
+    g(0, "TABLE"); g(2, "LAYER"); g(70, layers.length);
+    layers.forEach((name) => { g(0, "LAYER"); g(2, name); g(70, 0); g(62, 7); g(6, "CONTINUOUS"); });
+    g(0, "ENDTAB");
+    g(0, "ENDSEC");
+    g(0, "SECTION"); g(2, "ENTITIES");
+
+    holes.forEach((h) => {
+      const collar = h.collar || (h.planned && h.planned[0]) || (h.real && h.real[0]);
+      if (collar && Number.isFinite(collar.x)) {
+        g(0, "POINT"); g(8, "HOLE"); pt(10, collar);
+      }
+      if (h.planned && h.planned.length >= 2) {
+        g(0, "LINE"); g(8, "THEORETICAL HOLE");
+        pt(10, h.planned[0]);
+        g(11, num(h.planned[1].x)); g(21, num(h.planned[1].y)); g(31, num(h.planned[1].z));
+      }
+      if (h.real && h.real.length >= 2) {
+        g(0, "POLYLINE"); g(8, "REAL HOLE"); g(66, 1); g(10, 0); g(20, 0); g(30, 0);
+        h.real.forEach((p) => { g(0, "VERTEX"); g(8, "REAL HOLE"); pt(10, p); });
+        g(0, "SEQEND"); g(8, "REAL HOLE");
+      }
+      if (collar && h.id && Number.isFinite(collar.x)) {
+        g(0, "TEXT"); g(8, "NUMBER"); pt(10, collar); g(40, num(textH)); g(1, h.id);
+      }
+    });
+
+    g(0, "ENDSEC");
+    g(0, "EOF");
+    return out.join("\r\n") + "\r\n";
+  }
+
+  function exportDxf() {
+    if (!drawnHoles.length) return;
+    const blob = new Blob([buildDxf(drawnHoles)], { type: "application/dxf" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `furos-3d-${new Date().toISOString().slice(0, 10)}.dxf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   // ---------- Construção da cena ----------
-  function build(holes) {
+  function build(all, { keepView = false } = {}) {
     clearGroups();
     closeInfo();
-    current = holes;
+    closeMenu();
+    current = all;
+    // Furos ocultos individualmente pelo menu do botão direito saem da cena
+    const holes = all.filter((h) => {
+      const k = keyOf(h);
+      return !(k && hiddenKeys.has(k));
+    });
+    drawnHoles = holes;
+    if (dxfBtn) dxfBtn.disabled = !holes.length;
     const exag = Number(exagSel?.value) || 1;
 
     // Bounds nas coordenadas originais (x, y em planta; z em profundidade/cota)
@@ -451,7 +605,8 @@ function main() {
     controls.minDistance = R * 0.1;
     controls.maxDistance = R * 8;
     applyLayerVisibility();
-    applyView();
+    if (keepView) setViewButtons();
+    else applyView();
   }
 
   const animate = () => {
@@ -462,6 +617,7 @@ function main() {
   animate();
 
   resetBtn?.addEventListener("click", resetView);
+  dxfBtn?.addEventListener("click", exportDxf);
   exagSel?.addEventListener("change", () => build(current));
   layerInputs.forEach((input) => input.addEventListener("change", applyLayerVisibility));
   document.addEventListener("map3d:data", (e) => {

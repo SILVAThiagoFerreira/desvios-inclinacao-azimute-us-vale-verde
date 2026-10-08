@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="./assets/enaex-favicon.png">
   <meta name="description" content="Análise de desvios de inclinação, azimute e profundidade dos furos de perfuração — US Vale Verde.">
   <link rel="preconnect" href="https://docs.google.com">
-  <link rel="stylesheet" href="./styles.css?v=8">
+  <link rel="stylesheet" href="./styles.css?v=9">
 </head>
 <body>
   <header class="topbar">
@@ -145,6 +145,7 @@
             </label>
           </div>
           <div id="map3d-info" class="map3d-info" hidden></div>
+          <div id="map3d-menu" class="map3d-menu" role="menu" hidden></div>
           <div class="map3d-tools" data-wrap>
             <label class="map3d-exag">
               <span>EXAGERO VERTICAL</span>
@@ -161,6 +162,7 @@
             </div>
             <button id="map3d-hide" type="button" class="filter-reset" aria-pressed="false">Ocultar furos</button>
             <button id="map3d-reset" type="button" class="filter-reset">Redefinir vista</button>
+            <button id="map3d-dxf" type="button" class="filter-reset">Exportar DXF</button>
           </div>
           <div id="map3d-status" class="map-status is-visible" aria-live="polite">Carregando visualização 3D…</div>
           <div id="map3d-root" class="map3d-root"></div>
@@ -254,7 +256,7 @@
       }
     }
   </script>
-  <script type="module" src="./map3d.js?v=3"></script>
+  <script type="module" src="./map3d.js?v=4"></script>
   <script src="./app.js?v=18"></script>
   <script src="./excel-export-v2.js?v=4"></script>
 </body>

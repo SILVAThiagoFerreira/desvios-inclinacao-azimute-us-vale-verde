@@ -476,6 +476,40 @@ body {
   color: var(--ink);
 }
 .map3d-info[hidden] { display: none; }
+.map3d-menu {
+  position: absolute;
+  z-index: 5;
+  min-width: 200px;
+  padding: 4px;
+  background: #ffffff;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 18px rgba(56,66,75,0.16);
+  font-size: 11px;
+  color: var(--ink);
+}
+.map3d-menu[hidden] { display: none; }
+.map3d-menu__head {
+  padding: 6px 10px 4px;
+  color: var(--muted);
+  font-weight: 700;
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: 4px;
+}
+.map3d-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  appearance: none;
+  border: 0;
+  background: none;
+  font: inherit;
+  padding: 7px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.map3d-menu button:hover { background: #f3f4f5; }
+.map3d-tools button:disabled { opacity: 0.45; cursor: default; }
 .map3d-info__head {
   display: flex;
   align-items: center;
