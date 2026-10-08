@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="./assets/enaex-favicon.png">
   <meta name="description" content="Análise de desvios de inclinação, azimute e profundidade dos furos de perfuração — US Vale Verde.">
   <link rel="preconnect" href="https://docs.google.com">
-  <link rel="stylesheet" href="./styles.css?v=5">
+  <link rel="stylesheet" href="./styles.css?v=6">
 </head>
 <body>
   <header class="topbar">
@@ -22,6 +22,10 @@
         <p class="eyebrow">ANÁLISE DE DESVIOS · INCLINAÇÃO · AZIMUTE · PROFUNDIDADE</p>
         <h1>Aderência da Perfuração ao Projeto</h1>
       </div>
+      <button id="export-xlsx" type="button" class="filter-reset" title="Exportar dados filtrados para Excel">⤓ Excel</button>
+    </section>
+
+    <section class="filter-panel" aria-label="Filtros">
       <div class="filters">
         <label class="filter">
           <span>ANO</span>
@@ -36,7 +40,6 @@
           <select id="filter-plan"></select>
         </label>
         <button id="filter-reset" type="button" class="filter-reset">Limpar</button>
-        <button id="export-xlsx" type="button" class="filter-reset" title="Exportar dados filtrados para Excel">⤓ Excel</button>
       </div>
     </section>
 
@@ -63,7 +66,7 @@
           <p class="control__s">Limites −6,39° a +6,39° · tolerância ±6,39°</p>
         </div>
         <div class="control">
-          <p class="control__k">Δ Profundidade (Z)</p>
+          <p class="control__k">Δ Metragem de Perfuração (m)</p>
           <p class="control__v">0,00 m</p>
           <p class="control__s">Limites −0,20 m a +0,20 m · tolerância ±0,20 m (20 cm)</p>
         </div>
@@ -195,7 +198,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-  <script src="./app.js?v=15"></script>
+  <script src="./app.js?v=16"></script>
   <script src="./excel-export-v2.js?v=4"></script>
 </body>
 </html>

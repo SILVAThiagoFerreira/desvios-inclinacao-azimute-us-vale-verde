@@ -8,7 +8,7 @@ consolidada de furos perfurados e apresenta a aderência ao projeto conforme os
 | ------------------ | ----------------------------------------------- |
 | Ângulo frontal     | 15° ± 3,2° (faixa 11,8° a 18,2°)                |
 | Δ Azimute          | 0° ± 6,39°                                      |
-| Δ Profundidade (Z) | 0,00 m ± 0,20 m (20 cm)                         |
+| Δ Metragem de Perfuração (m) | 0,00 m ± 0,20 m (20 cm)                         |
 | Meta de aderência  | mínimo 80% dos furos                            |
 
 ## Publicação

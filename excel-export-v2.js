@@ -228,7 +228,7 @@ function buildExcelCleanChartDefinitions(refs) {
       series: [
         { name: "Ângulo", column: refs.plan.angle, start: refs.planStart, end: refs.planEnd, color: EXCEL_CLEAN_THEME.blue },
         { name: "Azimute", column: refs.plan.az, start: refs.planStart, end: refs.planEnd, color: EXCEL_CLEAN_THEME.orange },
-        { name: "Profundidade (Z)", column: refs.plan.depth, start: refs.planStart, end: refs.planEnd, color: EXCEL_CLEAN_THEME.teal },
+        { name: "Metragem de Perfuração (m)", column: refs.plan.depth, start: refs.planStart, end: refs.planEnd, color: EXCEL_CLEAN_THEME.teal },
       ],
     },
     { title: "Distribuição do Δ Azimute", type: "bar", cat: [refs.histAz.cat, refs.histStart, refs.histEnd], xTitle: "Faixa do desvio (°)", yTitle: "Nº de furos", series: [{ name: "Nº de furos", column: refs.histAz.value, start: refs.histStart, end: refs.histEnd, color: EXCEL_CLEAN_THEME.orange }] },

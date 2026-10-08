@@ -749,7 +749,7 @@ function drawByPlan(data) {
       datasets: [
         { label: "Ângulo", data: anglePct, backgroundColor: C.ink, borderWidth: 0 },
         { label: "Azimute", data: azPct, backgroundColor: C.red, borderWidth: 0 },
-        { label: "Profundidade (Z)", data: zPct, backgroundColor: "rgba(56,66,75,0.45)", borderWidth: 0 },
+        { label: "Metragem de Perfuração (m)", data: zPct, backgroundColor: "rgba(56,66,75,0.45)", borderWidth: 0 },
       ],
     },
     options: {
@@ -1381,7 +1381,7 @@ async function addNativeExcelChartsV2(buffer, refs, chartSheetId = 3) {
     { title: "Δ Azimute por furo", type: "line", cat: ["B", refs.holeStart, refs.holeEnd], series: [["Δ Azimute", "D", refs.holeStart, refs.holeEnd]], color: "FFB5651D" },
     { title: "Δ Profundidade por furo", type: "line", cat: ["B", refs.holeStart, refs.holeEnd], series: [["Δ Profundidade", "E", refs.holeStart, refs.holeEnd]], color: "FF6A994E" },
     { title: "Direção / aderência", type: "scatter", x: ["D", refs.holeStart, refs.holeEnd], series: [["Furos", "E", refs.holeStart, refs.holeEnd]], color: "FF7B2CBF" },
-    { title: "Aderência por plano", type: "bar", cat: ["G", refs.planStart, refs.planEnd], series: [["Ângulo", "H", refs.planStart, refs.planEnd], ["Azimute", "I", refs.planStart, refs.planEnd], ["Profundidade (Z)", "J", refs.planStart, refs.planEnd]], color: "FF264653" },
+    { title: "Aderência por plano", type: "bar", cat: ["G", refs.planStart, refs.planEnd], series: [["Ângulo", "H", refs.planStart, refs.planEnd], ["Azimute", "I", refs.planStart, refs.planEnd], ["Metragem de Perfuração (m)", "J", refs.planStart, refs.planEnd]], color: "FF264653" },
     { title: "Distribuição do azimute", type: "bar", cat: ["L", refs.histStart, refs.histEnd], series: [["Nº de furos", "M", refs.histStart, refs.histEnd]], color: "FFE76F51" },
     { title: "Distribuição da profundidade", type: "bar", cat: ["O", refs.histStart, refs.histEnd], series: [["Nº de furos", "P", refs.histStart, refs.histEnd]], color: "FF2A9D8F" },
     { title: "Distribuição do ângulo", type: "bar", cat: ["R", refs.histStart, refs.histEnd], series: [["Nº de furos", "S", refs.histStart, refs.histEnd]], color: "FFE9C46A" },
