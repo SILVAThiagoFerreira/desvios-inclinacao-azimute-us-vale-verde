@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="./assets/enaex-favicon.png">
   <meta name="description" content="Análise de desvios de inclinação, azimute e profundidade dos furos de perfuração — US Vale Verde.">
   <link rel="preconnect" href="https://docs.google.com">
-  <link rel="stylesheet" href="./styles.css?v=10">
+  <link rel="stylesheet" href="./styles.css?v=15">
 </head>
 <body>
   <header class="topbar">
@@ -140,6 +140,10 @@
               <span class="map-legend__swatch map-legend__swatch--collar3d"></span>Emboque
             </label>
             <label class="map-legend__item map3d-layer">
+              <input type="checkbox" data-map3d-layer="labels">
+              <span class="map3d-id-sample">12</span>IDs dos furos
+            </label>
+            <label class="map-legend__item map3d-layer">
               <input type="checkbox" data-map3d-layer="grid" checked>
               <span class="map-legend__swatch map-legend__swatch--grid3d"></span>Grade
             </label>
@@ -162,6 +166,7 @@
             </div>
             <button id="map3d-hide" type="button" class="filter-reset" aria-pressed="false">Ocultar furos</button>
             <button id="map3d-reset" type="button" class="filter-reset">Redefinir vista</button>
+            <button id="map3d-showall" type="button" class="filter-reset" disabled>Mostrar todos os furos</button>
             <button id="map3d-dxf" type="button" class="filter-reset">Exportar DXF</button>
           </div>
           <div id="map3d-status" class="map-status is-visible" aria-live="polite">Carregando visualização 3D…</div>
@@ -256,7 +261,7 @@
       }
     }
   </script>
-  <script type="module" src="./map3d.js?v=6"></script>
+  <script type="module" src="./map3d.js?v=9"></script>
   <script src="./app.js?v=18"></script>
   <script src="./excel-export-v2.js?v=4"></script>
 </body>

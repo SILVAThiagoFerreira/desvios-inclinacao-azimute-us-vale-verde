@@ -8,6 +8,7 @@
    ============================================================ */
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { CSS2DRenderer, CSS2DObject } from "three/addons/renderers/CSS2DRenderer.js";
 
 const COLORS = {
   planned: 0x6c747b,
@@ -21,7 +22,7 @@ const COLORS = {
 const PLANNED_OPACITY = 0.4;
 // Sensibilidade média: metade da velocidade padrão do OrbitControls
 const SPEED = { rotate: 0.5, zoom: 0.5, pan: 0.5 };
-const LAYER_KEYS = ["planned", "real", "collar", "grid"];
+const LAYER_KEYS = ["planned", "real", "collar", "grid", "labels"];
 
 function main() {
   const root = document.getElementById("map3d-root");
@@ -34,6 +35,7 @@ function main() {
   const hideBtn = document.getElementById("map3d-hide");
   const menuEl = document.getElementById("map3d-menu");
   const dxfBtn = document.getElementById("map3d-dxf");
+  const showAllBtn = document.getElementById("map3d-showall");
   if (!root || !statusEl) return;
 
   // Chave estável de cada furo (plano + ID; sem ID, usa a posição do emboque)
@@ -110,10 +112,16 @@ function main() {
   dom.addEventListener("auxclick", (e) => e.preventDefault());
   dom.addEventListener("mousedown", (e) => { if (e.button === 1) e.preventDefault(); });
 
+  // Rótulos de ID: elementos de texto sobre a cena (fonte simples, preta)
+  const labelRenderer = new CSS2DRenderer();
+  labelRenderer.domElement.className = "map3d-labels";
+  root.appendChild(labelRenderer.domElement);
+
   const resize = () => {
     const w = root.clientWidth || 1;
     const h = root.clientHeight || 1;
     renderer.setSize(w, h, false);
+    labelRenderer.setSize(w, h);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
   };
@@ -127,7 +135,10 @@ function main() {
   const applyLayerVisibility = () => {
     layerInputs.forEach((input) => {
       const group = layerGroups[input.dataset.map3dLayer];
-      if (group) group.visible = input.checked;
+      if (!group) return;
+      group.visible = input.checked;
+      // CSS2DRenderer só oculta rótulos cujo próprio flag visible está desligado
+      if (group === layerGroups.labels) group.children.forEach((label) => { label.visible = input.checked; });
     });
     const holesHidden = !layerChecked("planned") && !layerChecked("real");
     if (collarMeshes.sphere) collarMeshes.sphere.visible = !holesHidden;
@@ -180,6 +191,7 @@ function main() {
         obj.traverse((node) => {
           node.geometry?.dispose();
           node.material?.dispose();
+          if (node.isCSS2DObject) node.element.remove();
         });
       }
     });
@@ -265,10 +277,27 @@ function main() {
 
   // Clique (sem arrastar): esquerdo mostra detalhes; direito abre o menu do furo
   let downAt = null;
+  // Toque longo (celular/tablet, sem botão direito) abre o mesmo menu do furo
+  let pressTimer = null;
+  const cancelPress = () => { clearTimeout(pressTimer); pressTimer = null; };
   dom.addEventListener("pointerdown", (e) => {
     downAt = e.button === 0 || e.button === 2 ? { button: e.button, x: e.clientX, y: e.clientY } : null;
+    cancelPress();
+    if (e.pointerType === "touch" && e.isPrimary && downAt) {
+      const x = e.clientX, y = e.clientY;
+      pressTimer = setTimeout(() => {
+        pressTimer = null;
+        downAt = null;
+        openMenu({ clientX: x, clientY: y });
+      }, 500);
+    }
   });
+  dom.addEventListener("pointermove", (e) => {
+    if (pressTimer && downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 8) cancelPress();
+  });
+  dom.addEventListener("pointercancel", cancelPress);
   dom.addEventListener("pointerup", (e) => {
+    cancelPress();
     if (!downAt) return;
     const { button, x, y } = downAt;
     downAt = null;
@@ -470,6 +499,7 @@ function main() {
     });
     drawnHoles = holes;
     if (dxfBtn) dxfBtn.disabled = !holes.length;
+    if (showAllBtn) showAllBtn.disabled = !hiddenKeys.size;
     const exag = Number(exagSel?.value) || 1;
 
     // Bounds nas coordenadas originais (x, y em planta; z em profundidade/cota)
@@ -576,6 +606,19 @@ function main() {
       tubeMesh(realSegs, geom, mat, "real", rad * 0.45);
     }
 
+    // IDs dos furos: rótulo pequeno logo acima de cada emboque (camada "IDs")
+    holes.forEach((h, hi) => {
+      const c = h.collar || (h.planned && h.planned[0]) || (h.real && h.real[0]);
+      if (!h.id || !c || !Number.isFinite(c.x)) return;
+      const p = toWorld(c);
+      const el = document.createElement("div");
+      el.className = "map3d-id";
+      el.textContent = h.id;
+      const label = new CSS2DObject(el);
+      label.position.set(p.x, p.y + rad * 2.2, p.z);
+      layerGroups.labels.add(label);
+    });
+
     // Emboques: esferas azuis (ou, com furos ocultos, círculos achatados no chão)
     collarMeshes = {};
     if (collars.length) {
@@ -636,11 +679,18 @@ function main() {
     requestAnimationFrame(animate);
     controls.update();
     renderer.render(scene, camera);
+    labelRenderer.render(scene, camera);
   };
   animate();
 
   resetBtn?.addEventListener("click", resetView);
   dxfBtn?.addEventListener("click", exportDxf);
+  // Restaura todos os furos ocultos individualmente
+  showAllBtn?.addEventListener("click", () => {
+    hiddenKeys.clear();
+    closeMenu();
+    build(current, { keepView: true });
+  });
   exagSel?.addEventListener("change", () => build(current));
   layerInputs.forEach((input) => input.addEventListener("change", applyLayerVisibility));
   document.addEventListener("map3d:data", (e) => {

@@ -510,6 +510,27 @@ body {
 }
 .map3d-menu button:hover { background: #f3f4f5; }
 .map3d-tools button:disabled { opacity: 0.45; cursor: default; }
+.map3d-labels {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.map3d-id {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 8px;
+  line-height: 1;
+  color: #000;
+  white-space: nowrap;
+  transform: translate(-50%, -100%);
+}
+.map3d-id-sample {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 8px;
+  color: #000;
+  min-width: 10px;
+  text-align: center;
+}
 .map3d-info__head {
   display: flex;
   align-items: center;
@@ -671,4 +692,55 @@ body {
 }
 @media (max-width: 400px) {
   .kpis { grid-template-columns: 1fr; }
+}
+
+/* ---------- Mapa 3D: tablet e celular ----------
+   Legenda de camadas em faixa no topo, controles em faixa rolável na base,
+   informações do furo em painel de largura total acima dos controles. */
+@media (max-width: 900px) {
+  .map3d-body { height: clamp(380px, 62vw, 460px); }
+  .map3d-legend {
+    top: 8px;
+    left: 8px;
+    right: 8px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    padding: 5px 9px;
+    font-size: 10px;
+    max-width: none;
+  }
+  .map3d-tools[data-wrap],
+  .map3d-tools {
+    top: auto;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    max-width: none;
+    flex-wrap: wrap;
+    justify-content: center;
+    overflow: visible;
+    gap: 6px;
+  }
+  .map3d-tools .filter-reset { padding: 6px 10px; font-size: 11px; white-space: nowrap; }
+  .map3d-exag select { font-size: 11px; }
+  .map3d-seg button { padding: 6px 9px; white-space: nowrap; }
+  .map3d-info {
+    left: 8px;
+    right: 8px;
+    bottom: 104px;
+    min-width: 0;
+    max-width: none;
+    max-height: 48%;
+    overflow-y: auto;
+  }
+  .map3d-info__list { grid-template-columns: 1fr auto; }
+}
+@media (max-width: 560px) {
+  .map3d-body { height: 470px; }
+  .map3d-legend { gap: 3px 10px; font-size: 9.5px; }
+  /* Celular: controles em duas linhas, todos visíveis */
+  .map3d-tools .filter-reset,
+  .map3d-seg button { font-size: 10.5px; padding: 6px 8px; }
+  .map3d-info { bottom: 104px; max-height: 40%; }
 }
