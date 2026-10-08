@@ -78,67 +78,35 @@
       </div>
     </section>
 
-    <section class="params-editor" aria-label="Planilha de parâmetros de análise">
-      <div class="params-editor__head">
-        <p class="control-panel__title">Planilha de parâmetros de análise</p>
-        <div class="params-editor__actions">
-          <button id="param-reset" type="button" class="filter-reset">Restaurar padrão</button>
-          <button id="param-download" type="button" class="filter-reset">⤓ Baixar parametros.json</button>
-        </div>
-      </div>
-      <div class="params-editor__wrap">
-        <table class="params-table">
-          <thead>
-            <tr><th>Parâmetro</th><th>Valor</th><th>Unidade</th></tr>
-          </thead>
-          <tbody>
-            <tr><td>Ângulo frontal de projeto</td><td><input id="param-ANGULO_ESPERADO" type="number" step="0.1" inputmode="decimal"></td><td>°</td></tr>
-            <tr><td>Tolerância do ângulo frontal</td><td><input id="param-ANGULO_TOLERANCIA" type="number" step="0.1" inputmode="decimal"></td><td>°</td></tr>
-            <tr><td>Tolerância do Δ Azimute</td><td><input id="param-AZIMUTE_TOLERANCIA" type="number" step="0.01" inputmode="decimal"></td><td>°</td></tr>
-            <tr><td>Tolerância do Δ Profundidade</td><td><input id="param-PROFUNDIDADE_TOLERANCIA" type="number" step="0.01" inputmode="decimal"></td><td>m</td></tr>
-            <tr><td>Meta de aderência</td><td><input id="param-META_ADERENCIA" type="number" step="1" inputmode="decimal"></td><td>%</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <p class="params-editor__note" id="params-note">Edite um valor e pressione Enter ou saia do campo. Os cálculos e a nota de cálculo são atualizados na hora.</p>
-    </section>
-
     <section class="params-summary-block" aria-labelledby="params-summary-title">
       <div class="params-summary-block__head">
         <p class="control-panel__title" id="params-summary-title">Parâmetros atuais utilizados</p>
-        <p class="params-summary-block__note">Furos sem base geométrica em planta são desconsiderados apenas para o cálculo direcional.</p>
       </div>
       <div class="params-editor__wrap">
         <table class="params-table params-summary">
           <thead>
-            <tr><th>Parâmetro</th><th>Base de cálculo</th><th>Valor de projeto</th><th>Tolerância</th><th>Faixa aceita</th></tr>
+            <tr><th>Parâmetro</th><th>Valor</th><th>Limites</th></tr>
           </thead>
           <tbody>
             <tr>
               <td>Ângulo frontal</td>
-              <td>Inclinação executada em relação à vertical</td>
-              <td><span id="note-angle-exp">15</span>°</td>
-              <td>± <span id="note-angle-tol">3,2</span>°</td>
+              <td><span id="note-angle-exp">15</span>° ± <span id="note-angle-tol">3,2</span>°</td>
               <td><span id="note-angle-min">11,8</span>° a <span id="note-angle-max">18,2</span>°</td>
             </tr>
             <tr>
               <td>Δ Azimute</td>
-              <td>Azimute executado − azimute planejado</td>
-              <td>0°</td>
-              <td>± <span id="note-az">6,39</span>°</td>
+              <td>0° ± <span id="note-az">6,39</span>°</td>
               <td>−<span id="note-az-neg">6,39</span>° a +<span id="note-az-pos">6,39</span>°</td>
             </tr>
             <tr>
-              <td>Δ Profundidade</td>
-              <td>Profundidade executada − planejada</td>
-              <td>0,00 m</td>
-              <td>± <span id="note-depth">0,20</span> m (<span id="note-depth-cm">20</span> cm)</td>
+              <td>Δ Profundidade Medida</td>
+              <td>0,00 m ± <span id="note-depth">0,20</span> m</td>
               <td>−<span id="note-depth-neg">0,20</span> m a +<span id="note-depth-pos">0,20</span> m</td>
             </tr>
             <tr>
               <td>Meta de aderência</td>
-              <td>Percentual mínimo de furos dentro da faixa</td>
-              <td colspan="3"><span id="note-meta">80</span>%</td>
+              <td><span id="note-meta">80</span>%</td>
+              <td>mínimo de furos dentro dos limites</td>
             </tr>
           </tbody>
         </table>
