@@ -1665,11 +1665,34 @@ function currentMapFilterKey() {
 /* Publica os furos visíveis (mesmo filtro do mapa 2D) para o mapa 3D,
    que roda em map3d.js. Guardar em window evita perder o dado se o módulo
    ainda não tiver carregado quando o mapa for desenhado. */
+/* Dados da planilha de um furo (mesmo plano e ID), exibidos ao clicar no 3D. */
+function map3dInfo(plano, id) {
+  if (!id) return null;
+  const rec = RECORDS.find((r) => r.plano === plano && String(r.id) === String(Number(id)));
+  if (!rec) return null;
+  return {
+    angle: rec.angle,
+    azPlan: rec.azPlan,
+    azExec: rec.azExec,
+    azDelta: rec.azDelta,
+    depthPlan: rec.depthPlan,
+    depthExec: rec.depthExec,
+    depthDelta: rec.depthDelta,
+  };
+}
+
 function publishMap3D(withGeom, visibleIdsByPlan) {
   const holes = [];
   withGeom.forEach(({ plano, holes: list }) => list
     .filter((h) => !h.id || visibleIdsByPlan.get(plano)?.has(String(Number(h.id))) || visibleIdsByPlan.get(plano)?.has(String(h.id)))
-    .forEach((h) => holes.push({ collar: h.collar || null, planned: h.planned || null, real: h.real || null })));
+    .forEach((h) => holes.push({
+      plano,
+      id: h.id || null,
+      info: map3dInfo(plano, h.id),
+      collar: h.collar || null,
+      planned: h.planned || null,
+      real: h.real || null,
+    })));
   window.__map3d = holes;
   document.dispatchEvent(new CustomEvent("map3d:data", { detail: holes }));
 }

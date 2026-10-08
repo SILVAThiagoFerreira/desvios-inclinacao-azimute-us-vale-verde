@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="./assets/enaex-favicon.png">
   <meta name="description" content="Análise de desvios de inclinação, azimute e profundidade dos furos de perfuração — US Vale Verde.">
   <link rel="preconnect" href="https://docs.google.com">
-  <link rel="stylesheet" href="./styles.css?v=7">
+  <link rel="stylesheet" href="./styles.css?v=8">
 </head>
 <body>
   <header class="topbar">
@@ -123,15 +123,29 @@
         <div class="chart-block__head">
           <p class="chart-block__eyebrow">GEOMETRIA 3D</p>
           <h2>Mapa 3D de execução</h2>
-          <p>Arraste para girar · role para aproximar · arraste com o botão direito para mover · mesmos furos e filtros do mapa acima.</p>
+          <p>Arraste com o botão esquerdo ou direito para girar · botão do meio para mover · role para aproximar · clique em um furo para ver os detalhes · mesmos furos e filtros do mapa acima.</p>
         </div>
         <div class="chart-block__body map3d-body">
-          <div class="map-legend map3d-legend">
-            <span class="map-legend__item"><span class="map-legend__swatch map-legend__swatch--planned3d"></span>Planejado</span>
-            <span class="map-legend__item"><span class="map-legend__swatch map-legend__swatch--real"></span>Executado</span>
-            <span class="map-legend__item"><span class="map-legend__swatch map-legend__swatch--collar3d"></span>Emboque</span>
+          <div class="map-legend map3d-legend" role="group" aria-label="Camadas do mapa 3D">
+            <label class="map-legend__item map3d-layer">
+              <input type="checkbox" data-map3d-layer="planned" checked>
+              <span class="map-legend__swatch map-legend__swatch--planned3d"></span>Planejado (furos teóricos)
+            </label>
+            <label class="map-legend__item map3d-layer">
+              <input type="checkbox" data-map3d-layer="real" checked>
+              <span class="map-legend__swatch map-legend__swatch--real"></span>Executado
+            </label>
+            <label class="map-legend__item map3d-layer">
+              <input type="checkbox" data-map3d-layer="collar" checked>
+              <span class="map-legend__swatch map-legend__swatch--collar3d"></span>Emboque
+            </label>
+            <label class="map-legend__item map3d-layer">
+              <input type="checkbox" data-map3d-layer="grid" checked>
+              <span class="map-legend__swatch map-legend__swatch--grid3d"></span>Grade
+            </label>
           </div>
-          <div class="map3d-tools">
+          <div id="map3d-info" class="map3d-info" hidden></div>
+          <div class="map3d-tools" data-wrap>
             <label class="map3d-exag">
               <span>EXAGERO VERTICAL</span>
               <select id="map3d-exag">
@@ -141,6 +155,11 @@
                 <option value="8">8×</option>
               </select>
             </label>
+            <div class="map3d-seg" role="group" aria-label="Tipo de vista">
+              <button type="button" data-map3d-view="persp" aria-pressed="true">Perspectiva</button>
+              <button type="button" data-map3d-view="top" aria-pressed="false">Planta</button>
+            </div>
+            <button id="map3d-hide" type="button" class="filter-reset" aria-pressed="false">Ocultar furos</button>
             <button id="map3d-reset" type="button" class="filter-reset">Redefinir vista</button>
           </div>
           <div id="map3d-status" class="map-status is-visible" aria-live="polite">Carregando visualização 3D…</div>
@@ -235,8 +254,8 @@
       }
     }
   </script>
-  <script type="module" src="./map3d.js?v=2"></script>
-  <script src="./app.js?v=17"></script>
+  <script type="module" src="./map3d.js?v=3"></script>
+  <script src="./app.js?v=18"></script>
   <script src="./excel-export-v2.js?v=4"></script>
 </body>
 </html>
