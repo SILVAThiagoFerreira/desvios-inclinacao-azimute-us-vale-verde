@@ -157,8 +157,10 @@ function main() {
   const applyView = () => {
     if (!home) return;
     if (viewMode === "top") {
-      // Planta é 2D: sem giro (botões esquerdo, direito e toque), só mover e aproximar
-      controls.enableRotate = false;
+      // Planta: continua de cima (2D). Só o botão direito gira em torno do eixo
+      // vertical; o do meio move; a roda aproxima. Esquerdo não faz nada aqui.
+      controls.enableRotate = true;
+      controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE };
       controls.minPolarAngle = 0;
       controls.maxPolarAngle = 0;
       const R = home.R;
@@ -167,6 +169,7 @@ function main() {
       controls.update();
     } else {
       controls.enableRotate = true;
+      controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE };
       controls.minPolarAngle = 0;
       controls.maxPolarAngle = Math.PI;
       resetView();
