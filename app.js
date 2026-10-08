@@ -17,6 +17,19 @@ const DXF_INDEX_GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/g
 const DXF_PROXY_URL = "https://script.google.com/macros/s/AKfycbxMfvutG2Hu4i2tbXp3idLte-xtad33stWV-JSpHzlJMQ4zhFCMV0rUTPc474Z-8j1UwA/exec";
 const DXF_REFRESH_MS = 30_000;
 
+// Parâmetros de análise vêm da aba PARAMETROS (colunas CHAVE | VALOR).
+// Se a aba não responder, valem estes padrões.
+const PARAMS_GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?sheet=PARAMETROS&tqx=out:json&headers=1`;
+const PARAMS_DEFAULTS = {
+  ANGULO_ESPERADO: 15,
+  ANGULO_TOLERANCIA: 3.2,
+  AZIMUTE_TOLERANCIA: 6.39,
+  PROFUNDIDADE_TOLERANCIA: 0.20,
+  META_ADERENCIA: 80,
+};
+let PARAMS = { ...PARAMS_DEFAULTS };
+let PARAMS_SIGNATURE = "";
+
 const LIMITS = {
   angleMin: 11.8, angleMax: 18.2, angleExpected: 15, angleTol: 3.2,
   azimuth: 6.39,
@@ -68,8 +81,84 @@ function setStatus(kind, text) {
 }
 
 /* ===================== Carregamento ===================== */
+/* ===================== Parâmetros da planilha ===================== */
+function parseParamNumber(v) {
+  if (v == null || v === "") return null;
+  const n = typeof v === "number" ? v : parseFloat(String(v).replace(",", "."));
+  return isFinite(n) ? n : null;
+}
+
+// Lê a aba PARAMETROS. Retorna true se os valores mudaram desde a última leitura.
+async function loadParameters() {
+  const found = {};
+  try {
+    const res = await fetch(PARAMS_GVIZ_URL, { cache: "no-store" });
+    if (!res.ok) throw new Error("gviz HTTP " + res.status);
+    const table = parseGviz(await res.text());
+    const iKey = table.cols.findIndex((c) => norm(c.label) === "CHAVE");
+    const iVal = table.cols.findIndex((c) => norm(c.label) === "VALOR");
+    if (iKey < 0 || iVal < 0) throw new Error("aba PARAMETROS sem colunas CHAVE/VALOR");
+    for (const r of table.rows) {
+      const key = r.c[iKey] && r.c[iKey].v;
+      const num = parseParamNumber(r.c[iVal] && r.c[iVal].v);
+      if (key && num != null) found[norm(String(key))] = num;
+    }
+  } catch (e) {
+    console.warn("Parâmetros da planilha indisponíveis; usando padrões:", e);
+  }
+  const merged = { ...PARAMS_DEFAULTS };
+  for (const k of Object.keys(PARAMS_DEFAULTS)) {
+    if (found[k] != null) merged[k] = found[k];
+  }
+  const signature = JSON.stringify(merged);
+  const changed = signature !== PARAMS_SIGNATURE;
+  PARAMS = merged;
+  PARAMS_SIGNATURE = signature;
+  return changed;
+}
+
+// Aplica PARAMS em LIMITS e nos textos fixos do painel e da nota de cálculo.
+function applyParameters() {
+  const p = PARAMS;
+  const angleTol = p.ANGULO_TOLERANCIA;
+  Object.assign(LIMITS, {
+    angleExpected: p.ANGULO_ESPERADO,
+    angleTol,
+    angleMin: +(p.ANGULO_ESPERADO - angleTol).toFixed(2),
+    angleMax: +(p.ANGULO_ESPERADO + angleTol).toFixed(2),
+    azimuth: p.AZIMUTE_TOLERANCIA,
+    depth: p.PROFUNDIDADE_TOLERANCIA,
+    meta: p.META_ADERENCIA,
+  });
+
+  const fp = (n, d = 0) =>
+    new Intl.NumberFormat("pt-BR", { minimumFractionDigits: d, maximumFractionDigits: 2 }).format(n);
+  const set = (id, text) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  };
+  const L = LIMITS;
+
+  set("ctl-angle-value", fp(L.angleExpected, 2) + "°");
+  set("ctl-angle-range", `Faixa ${fp(L.angleMin, 1)}° a ${fp(L.angleMax, 1)}° · tolerância ±${fp(L.angleTol, 1)}°`);
+  set("ctl-az-range", `Limites −${fp(L.azimuth, 2)}° a +${fp(L.azimuth, 2)}° · tolerância ±${fp(L.azimuth, 2)}°`);
+  set("ctl-depth-range", `Limites −${fp(L.depth, 2)} m a +${fp(L.depth, 2)} m · tolerância ±${fp(L.depth, 2)} m (${fp(Math.round(L.depth * 100))} cm)`);
+  set("ctl-meta-value", fp(L.meta, 1) + "%");
+
+  set("note-angle-exp", fp(L.angleExpected));
+  set("note-angle-tol", fp(L.angleTol, 1));
+  set("note-angle-min", fp(L.angleMin, 1));
+  set("note-angle-max", fp(L.angleMax, 1));
+  set("note-az", fp(L.azimuth, 2));
+  set("note-depth", fp(L.depth, 2));
+  set("note-depth-cm", fp(Math.round(L.depth * 100)));
+  set("note-meta", fp(L.meta));
+}
+
 async function loadSheet() {
   setStatus("loading", "Carregando dados da planilha…");
+  await loadParameters();
+  applyParameters();
   let table;
   try {
     const res = await fetch(GVIZ_URL, { cache: "no-store" });
@@ -1556,6 +1645,10 @@ async function refreshDxfIndexIfChanged() {
     const before = DXF_INDEX_SIGNATURE;
     await loadDxfIndex(true);
     if (before !== DXF_INDEX_SIGNATURE) await drawMap();
+    if (await loadParameters()) {
+      applyParameters();
+      render();
+    }
   } finally {
     DXF_REFRESH_IN_FLIGHT = false;
   }

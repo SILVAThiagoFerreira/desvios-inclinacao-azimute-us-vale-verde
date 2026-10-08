@@ -11,6 +11,23 @@ consolidada de furos perfurados e apresenta a aderência ao projeto conforme os
 | Δ Profundidade Medida (m) | 0,00 m ± 0,20 m (20 cm)                         |
 | Meta de aderência  | mínimo 80% dos furos                            |
 
+## Parâmetros de análise pela planilha
+
+Os parâmetros (ângulo, tolerâncias e meta) são lidos da aba `PARAMETROS` da mesma
+planilha, com as colunas `CHAVE` e `VALOR`:
+
+| CHAVE | VALOR padrão | Significado |
+| ----- | ------------ | ----------- |
+| `ANGULO_ESPERADO` | 15 | ângulo frontal de projeto (°) |
+| `ANGULO_TOLERANCIA` | 3,2 | tolerância do ângulo frontal (°) |
+| `AZIMUTE_TOLERANCIA` | 6,39 | tolerância do Δ Azimute (°) |
+| `PROFUNDIDADE_TOLERANCIA` | 0,20 | tolerância do Δ Profundidade (m) |
+| `META_ADERENCIA` | 80 | meta mínima de aderência (%) |
+
+Os valores são lidos a cada carregamento e a cada atualização de 30 segundos.
+Se a aba não existir ou não puder ser lida, o site usa os valores padrão acima.
+Use vírgula ou ponto como separador decimal.
+
 ## Publicação
 - Deploy via GitHub Pages (branch `main`, raiz).
 - Sem backend para o dashboard: os dados são lidos direto do Google Sheets via `gviz` (fallback CSV) a cada acesso.

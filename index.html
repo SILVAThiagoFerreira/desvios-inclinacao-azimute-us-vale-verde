@@ -57,22 +57,22 @@
       <div class="control-panel__grid">
         <div class="control">
           <p class="control__k">Ângulo frontal</p>
-          <p class="control__v">15,00°</p>
-          <p class="control__s">Faixa 11,8° a 18,2° · tolerância ±3,2°</p>
+          <p class="control__v" id="ctl-angle-value">15,00°</p>
+          <p class="control__s" id="ctl-angle-range">Faixa 11,8° a 18,2° · tolerância ±3,2°</p>
         </div>
         <div class="control">
           <p class="control__k">Δ Azimute</p>
           <p class="control__v">0,00°</p>
-          <p class="control__s">Limites −6,39° a +6,39° · tolerância ±6,39°</p>
+          <p class="control__s" id="ctl-az-range">Limites −6,39° a +6,39° · tolerância ±6,39°</p>
         </div>
         <div class="control">
           <p class="control__k">Δ Profundidade Medida (m)</p>
           <p class="control__v">0,00 m</p>
-          <p class="control__s">Limites −0,20 m a +0,20 m · tolerância ±0,20 m (20 cm)</p>
+          <p class="control__s" id="ctl-depth-range">Limites −0,20 m a +0,20 m · tolerância ±0,20 m (20 cm)</p>
         </div>
         <div class="control">
           <p class="control__k">Meta de aderência</p>
-          <p class="control__v">80,0%</p>
+          <p class="control__v" id="ctl-meta-value">80,0%</p>
           <p class="control__s">Mínimo de furos dentro dos limites</p>
         </div>
       </div>
@@ -245,7 +245,10 @@
     <p class="source-note">
       <strong>Base de cálculo:</strong> ângulo frontal = inclinação executada em relação à vertical; Δ Azimute = azimute executado − azimute planejado; Δ Profundidade = profundidade executada − planejada.
       <strong>Parâmetros atuais do sistema:</strong>
-      ângulo frontal 15° ± 3,2° (faixa 11,8° a 18,2°), Δ Azimute 0° ± 6,39°, Δ Profundidade 0,00 m ± 0,20 m (20 cm), meta de aderência 80%.
+      ângulo frontal <span id="note-angle-exp">15</span>° ± <span id="note-angle-tol">3,2</span>° (faixa <span id="note-angle-min">11,8</span>° a <span id="note-angle-max">18,2</span>°),
+      Δ Azimute 0° ± <span id="note-az">6,39</span>°,
+      Δ Profundidade 0,00 m ± <span id="note-depth">0,20</span> m (<span id="note-depth-cm">20</span> cm),
+      meta de aderência <span id="note-meta">80</span>%.
       Furos sem base geométrica em planta são desconsiderados apenas para o cálculo direcional.
     </p>
   </main>
@@ -262,7 +265,7 @@
     }
   </script>
   <script type="module" src="./map3d.js?v=12"></script>
-  <script src="./app.js?v=19"></script>
+  <script src="./app.js?v=20"></script>
   <script src="./excel-export-v2.js?v=5"></script>
 </body>
 </html>
