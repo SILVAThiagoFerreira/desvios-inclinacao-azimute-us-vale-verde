@@ -218,7 +218,11 @@ function applyParameters() {
   set("note-angle-min", fp(L.angleMin, 1));
   set("note-angle-max", fp(L.angleMax, 1));
   set("note-az", fp(L.azimuth, 2));
+  set("note-az-neg", fp(L.azimuth, 2));
+  set("note-az-pos", fp(L.azimuth, 2));
   set("note-depth", fp(L.depth, 2));
+  set("note-depth-neg", fp(L.depth, 2));
+  set("note-depth-pos", fp(L.depth, 2));
   set("note-depth-cm", fp(Math.round(L.depth * 100)));
   set("note-meta", fp(L.meta));
 }

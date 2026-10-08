@@ -690,6 +690,10 @@ body {
   border-bottom: 1px solid var(--rule-soft);
 }
 .params-table td:last-child { color: var(--muted); width: 60px; }
+.params-summary td:last-child { color: var(--ink); width: auto; }
+.params-summary td:nth-child(2) { color: var(--muted); }
+.params-summary td { white-space: nowrap; }
+.params-summary td:nth-child(2) { white-space: normal; }
 .params-table input {
   font-family: var(--font);
   font-size: 13px;

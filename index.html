@@ -267,13 +267,42 @@
       </div>
     </section>
 
+    <div class="params-editor__wrap">
+      <table class="params-table params-summary">
+        <thead>
+          <tr><th>Parâmetro</th><th>Base de cálculo</th><th>Valor de projeto</th><th>Tolerância</th><th>Faixa aceita</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Ângulo frontal</td>
+            <td>Inclinação executada em relação à vertical</td>
+            <td><span id="note-angle-exp">15</span>°</td>
+            <td>± <span id="note-angle-tol">3,2</span>°</td>
+            <td><span id="note-angle-min">11,8</span>° a <span id="note-angle-max">18,2</span>°</td>
+          </tr>
+          <tr>
+            <td>Δ Azimute</td>
+            <td>Azimute executado − azimute planejado</td>
+            <td>0°</td>
+            <td>± <span id="note-az">6,39</span>°</td>
+            <td>−<span id="note-az-neg">6,39</span>° a +<span id="note-az-pos">6,39</span>°</td>
+          </tr>
+          <tr>
+            <td>Δ Profundidade</td>
+            <td>Profundidade executada − planejada</td>
+            <td>0,00 m</td>
+            <td>± <span id="note-depth">0,20</span> m (<span id="note-depth-cm">20</span> cm)</td>
+            <td>−<span id="note-depth-neg">0,20</span> m a +<span id="note-depth-pos">0,20</span> m</td>
+          </tr>
+          <tr>
+            <td>Meta de aderência</td>
+            <td>Percentual mínimo de furos dentro da faixa</td>
+            <td colspan="3"><span id="note-meta">80</span>%</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
     <p class="source-note">
-      <strong>Base de cálculo:</strong> ângulo frontal = inclinação executada em relação à vertical; Δ Azimute = azimute executado − azimute planejado; Δ Profundidade = profundidade executada − planejada.
-      <strong>Parâmetros atuais do sistema:</strong>
-      ângulo frontal <span id="note-angle-exp">15</span>° ± <span id="note-angle-tol">3,2</span>° (faixa <span id="note-angle-min">11,8</span>° a <span id="note-angle-max">18,2</span>°),
-      Δ Azimute 0° ± <span id="note-az">6,39</span>°,
-      Δ Profundidade 0,00 m ± <span id="note-depth">0,20</span> m (<span id="note-depth-cm">20</span> cm),
-      meta de aderência <span id="note-meta">80</span>%.
       Furos sem base geométrica em planta são desconsiderados apenas para o cálculo direcional.
     </p>
   </main>
