@@ -423,7 +423,7 @@ body {
 }
 /* ---------- Mapa 3D ---------- */
 .map3d-body {
-  height: clamp(330px, 36vw, 460px);
+  height: clamp(440px, 56vw, 640px);
   min-height: 0;
   border: 1px solid var(--rule);
   border-radius: var(--radius);
@@ -686,7 +686,7 @@ body {
   .chart-block__body--map svg { height: 250px; }
   .map-legend { top: 12px; left: 12px; right: 12px; gap: 8px 12px; font-size: 9px; }
   .source-note { font-size: 11px; }
-  .map3d-body { height: 320px; }
+  .map3d-body { height: 420px; }
   .map3d-tools { top: auto; bottom: 10px; right: 10px; }
   .map3d-tools .filter-reset { padding: 6px 10px; }
 }
@@ -698,7 +698,7 @@ body {
    Legenda de camadas em faixa no topo, controles em faixa rolável na base,
    informações do furo em painel de largura total acima dos controles. */
 @media (max-width: 900px) {
-  .map3d-body { height: clamp(380px, 62vw, 460px); }
+  .map3d-body { height: clamp(480px, 84vw, 640px); }
   .map3d-legend {
     top: 8px;
     left: 8px;
@@ -737,7 +737,7 @@ body {
   .map3d-info__list { grid-template-columns: 1fr auto; }
 }
 @media (max-width: 560px) {
-  .map3d-body { height: 470px; }
+  .map3d-body { height: 540px; }
   .map3d-legend { gap: 3px 10px; font-size: 9.5px; }
   /* Celular: controles em duas linhas, todos visíveis */
   .map3d-tools .filter-reset,
