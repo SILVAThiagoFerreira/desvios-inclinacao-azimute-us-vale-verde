@@ -1624,7 +1624,7 @@ function parseDxfHoles(text) {
     return isFinite(v) ? v : fb;
   };
   const layerOf = (e) => norm(gf(e.raw, 8, ""));
-  const pt = (raw) => ({ x: gn(raw, 10), y: gn(raw, 20) });
+  const pt = (raw) => ({ x: gn(raw, 10), y: gn(raw, 20), z: gn(raw, 30, 0) });
 
   const holes = [];
   let cur = null;
@@ -1639,8 +1639,8 @@ function parseDxfHoles(text) {
     if (!cur) cur = {};
     if (e.type === "LINE" && layer === "THEORETICAL HOLE") {
       cur.planned = [
-        { x: gn(e.raw, 10), y: gn(e.raw, 20) },
-        { x: gn(e.raw, 11), y: gn(e.raw, 21) },
+        { x: gn(e.raw, 10), y: gn(e.raw, 20), z: gn(e.raw, 30, 0) },
+        { x: gn(e.raw, 11), y: gn(e.raw, 21), z: gn(e.raw, 31, 0) },
       ];
     } else if (e.type === "TEXT" && layer === "NUMBER") {
       cur.id = gf(e.raw, 1, "").trim();
@@ -1660,6 +1660,18 @@ function currentMapFilterKey() {
   return ["filter-year", "filter-month", "filter-plan"]
     .map((id) => document.getElementById(id)?.value || "")
     .join("|");
+}
+
+/* Publica os furos visíveis (mesmo filtro do mapa 2D) para o mapa 3D,
+   que roda em map3d.js. Guardar em window evita perder o dado se o módulo
+   ainda não tiver carregado quando o mapa for desenhado. */
+function publishMap3D(withGeom, visibleIdsByPlan) {
+  const holes = [];
+  withGeom.forEach(({ plano, holes: list }) => list
+    .filter((h) => !h.id || visibleIdsByPlan.get(plano)?.has(String(Number(h.id))) || visibleIdsByPlan.get(plano)?.has(String(h.id)))
+    .forEach((h) => holes.push({ collar: h.collar || null, planned: h.planned || null, real: h.real || null })));
+  window.__map3d = holes;
+  document.dispatchEvent(new CustomEvent("map3d:data", { detail: holes }));
 }
 
 async function drawMap() {
@@ -1690,6 +1702,7 @@ async function drawMap() {
   if (!planos.length) {
     status.textContent = "Nenhum plano no filtro atual.";
     subtitle.textContent = "Planejado em cinza, executado em vermelho e emboques marcados.";
+    publishMap3D([], null);
     return;
   }
 
@@ -1712,6 +1725,7 @@ async function drawMap() {
     status.textContent = selected
       ? `Sem DXF disponível para ${selected}. Os furos da planilha seguem carregados nos indicadores e gráficos; o mapa precisa do desenho do plano.`
       : "Nenhum DXF disponível para os planos do filtro. Os furos da planilha seguem carregados nos indicadores e gráficos; o mapa precisa do desenho do plano.";
+    publishMap3D([], null);
     return;
   }
   status.classList.remove("is-visible");
@@ -1748,6 +1762,7 @@ async function drawMap() {
   if (!isFinite(minX) || !isFinite(maxY)) {
     status.classList.add("is-visible");
     status.textContent = "Geometria vazia para os DXFs encontrados.";
+    publishMap3D([], null);
     return;
   }
 
@@ -1826,6 +1841,7 @@ async function drawMap() {
   frag.appendChild(realG);
   frag.appendChild(collarG);
   svg.appendChild(frag);
+  publishMap3D(withGeom, visibleIdsByPlan);
 
   if (missing.length) {
     const note = missing.length > 4 ? `${missing.slice(0, 4).join(", ")}, +${missing.length - 4}` : missing.join(", ");

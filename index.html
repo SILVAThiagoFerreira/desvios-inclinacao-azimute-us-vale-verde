@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="./assets/enaex-favicon.png">
   <meta name="description" content="Análise de desvios de inclinação, azimute e profundidade dos furos de perfuração — US Vale Verde.">
   <link rel="preconnect" href="https://docs.google.com">
-  <link rel="stylesheet" href="./styles.css?v=6">
+  <link rel="stylesheet" href="./styles.css?v=7">
 </head>
 <body>
   <header class="topbar">
@@ -119,6 +119,35 @@
         </div>
       </div>
 
+      <div class="chart-block" id="map3d-card">
+        <div class="chart-block__head">
+          <p class="chart-block__eyebrow">GEOMETRIA 3D</p>
+          <h2>Mapa 3D de execução</h2>
+          <p>Arraste para girar · role para aproximar · arraste com o botão direito para mover · mesmos furos e filtros do mapa acima.</p>
+        </div>
+        <div class="chart-block__body map3d-body">
+          <div class="map-legend map3d-legend">
+            <span class="map-legend__item"><span class="map-legend__swatch map-legend__swatch--planned3d"></span>Planejado</span>
+            <span class="map-legend__item"><span class="map-legend__swatch map-legend__swatch--real"></span>Executado</span>
+            <span class="map-legend__item"><span class="map-legend__swatch map-legend__swatch--collar3d"></span>Emboque</span>
+          </div>
+          <div class="map3d-tools">
+            <label class="map3d-exag">
+              <span>EXAGERO VERTICAL</span>
+              <select id="map3d-exag">
+                <option value="1">1×</option>
+                <option value="2" selected>2×</option>
+                <option value="4">4×</option>
+                <option value="8">8×</option>
+              </select>
+            </label>
+            <button id="map3d-reset" type="button" class="filter-reset">Redefinir vista</button>
+          </div>
+          <div id="map3d-status" class="map-status is-visible" aria-live="polite">Carregando visualização 3D…</div>
+          <div id="map3d-root" class="map3d-root"></div>
+        </div>
+      </div>
+
       <div class="chart-block">
         <div class="chart-block__head">
           <h2>Ângulo frontal por furo</h2>
@@ -198,7 +227,16 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-  <script src="./app.js?v=16"></script>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+  <script type="module" src="./map3d.js?v=2"></script>
+  <script src="./app.js?v=17"></script>
   <script src="./excel-export-v2.js?v=4"></script>
 </body>
 </html>
