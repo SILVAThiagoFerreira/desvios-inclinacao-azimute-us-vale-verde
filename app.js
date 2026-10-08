@@ -17,9 +17,17 @@ const DXF_INDEX_GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/g
 const DXF_PROXY_URL = "https://script.google.com/macros/s/AKfycbxMfvutG2Hu4i2tbXp3idLte-xtad33stWV-JSpHzlJMQ4zhFCMV0rUTPc474Z-8j1UwA/exec";
 const DXF_REFRESH_MS = 30_000;
 
-// Parâmetros de análise vêm da aba PARAMETROS (colunas CHAVE | VALOR).
-// Se a aba não responder, valem estes padrões.
-const PARAMS_GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?sheet=PARAMETROS&tqx=out:json&headers=1`;
+// Parâmetros de análise: tabela editável dentro do site. Ordem de prioridade:
+// ajustes salvos neste navegador > data/parametros.json > padrões abaixo.
+const PARAMS_JSON_URL = "./data/parametros.json";
+const PARAMS_STORAGE_KEY = "desvios.parametros.v1";
+const PARAMS_FIELDS = [
+  { key: "ANGULO_ESPERADO", label: "Ângulo frontal de projeto", unit: "°", step: "0.1" },
+  { key: "ANGULO_TOLERANCIA", label: "Tolerância do ângulo frontal", unit: "°", step: "0.1" },
+  { key: "AZIMUTE_TOLERANCIA", label: "Tolerância do Δ Azimute", unit: "°", step: "0.01" },
+  { key: "PROFUNDIDADE_TOLERANCIA", label: "Tolerância do Δ Profundidade", unit: "m", step: "0.01" },
+  { key: "META_ADERENCIA", label: "Meta de aderência", unit: "%", step: "1" },
+];
 const PARAMS_DEFAULTS = {
   ANGULO_ESPERADO: 15,
   ANGULO_TOLERANCIA: 3.2,
@@ -28,7 +36,6 @@ const PARAMS_DEFAULTS = {
   META_ADERENCIA: 80,
 };
 let PARAMS = { ...PARAMS_DEFAULTS };
-let PARAMS_SIGNATURE = "";
 
 const LIMITS = {
   angleMin: 11.8, angleMax: 18.2, angleExpected: 15, angleTol: 3.2,
@@ -88,33 +95,94 @@ function parseParamNumber(v) {
   return isFinite(n) ? n : null;
 }
 
-// Lê a aba PARAMETROS. Retorna true se os valores mudaram desde a última leitura.
-async function loadParameters() {
-  const found = {};
-  try {
-    const res = await fetch(PARAMS_GVIZ_URL, { cache: "no-store" });
-    if (!res.ok) throw new Error("gviz HTTP " + res.status);
-    const table = parseGviz(await res.text());
-    const iKey = table.cols.findIndex((c) => norm(c.label) === "CHAVE");
-    const iVal = table.cols.findIndex((c) => norm(c.label) === "VALOR");
-    if (iKey < 0 || iVal < 0) throw new Error("aba PARAMETROS sem colunas CHAVE/VALOR");
-    for (const r of table.rows) {
-      const key = r.c[iKey] && r.c[iKey].v;
-      const num = parseParamNumber(r.c[iVal] && r.c[iVal].v);
-      if (key && num != null) found[norm(String(key))] = num;
-    }
-  } catch (e) {
-    console.warn("Parâmetros da planilha indisponíveis; usando padrões:", e);
-  }
-  const merged = { ...PARAMS_DEFAULTS };
+function pickParams(obj) {
+  const out = {};
   for (const k of Object.keys(PARAMS_DEFAULTS)) {
-    if (found[k] != null) merged[k] = found[k];
+    const n = parseParamNumber(obj && obj[k]);
+    if (n != null) out[k] = n;
   }
-  const signature = JSON.stringify(merged);
-  const changed = signature !== PARAMS_SIGNATURE;
-  PARAMS = merged;
-  PARAMS_SIGNATURE = signature;
-  return changed;
+  return out;
+}
+
+async function loadParameters() {
+  let base = { ...PARAMS_DEFAULTS };
+  try {
+    const res = await fetch(PARAMS_JSON_URL, { cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    base = { ...base, ...pickParams(await res.json()) };
+  } catch (e) {
+    console.warn("data/parametros.json indisponível; usando padrões:", e);
+  }
+  let saved = null;
+  try {
+    saved = JSON.parse(localStorage.getItem(PARAMS_STORAGE_KEY) || "null");
+  } catch (e) {
+    saved = null;
+  }
+  PARAMS = saved ? { ...base, ...pickParams(saved) } : base;
+}
+
+function saveParameters(values) {
+  PARAMS = { ...PARAMS, ...pickParams(values) };
+  try {
+    localStorage.setItem(PARAMS_STORAGE_KEY, JSON.stringify(PARAMS));
+  } catch (e) {
+    console.warn("Não foi possível salvar os parâmetros neste navegador:", e);
+  }
+  applyParameters();
+  if (RECORDS.length) render();
+}
+
+function renderParamsEditor() {
+  for (const f of PARAMS_FIELDS) {
+    const el = document.getElementById("param-" + f.key);
+    if (el) el.value = PARAMS[f.key];
+  }
+}
+
+function setParamsNote(text) {
+  const el = document.getElementById("params-note");
+  if (el) el.textContent = text;
+}
+
+function setupParamsEditor() {
+  for (const f of PARAMS_FIELDS) {
+    const el = document.getElementById("param-" + f.key);
+    if (!el) continue;
+    el.addEventListener("change", () => {
+      const n = parseParamNumber(el.value);
+      if (n == null) {
+        el.value = PARAMS[f.key];
+        return;
+      }
+      saveParameters({ [f.key]: n });
+      renderParamsEditor();
+      setParamsNote("Alteração aplicada e salva neste navegador.");
+    });
+  }
+
+  document.getElementById("param-reset")?.addEventListener("click", async () => {
+    try {
+      localStorage.removeItem(PARAMS_STORAGE_KEY);
+    } catch (e) {
+      console.warn(e);
+    }
+    await loadParameters();
+    applyParameters();
+    renderParamsEditor();
+    if (RECORDS.length) render();
+    setParamsNote("Valores restaurados (arquivo data/parametros.json).");
+  });
+
+  document.getElementById("param-download")?.addEventListener("click", () => {
+    const blob = new Blob([JSON.stringify(PARAMS, null, 2) + "\n"], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "parametros.json";
+    a.click();
+    URL.revokeObjectURL(a.href);
+    setParamsNote("Arquivo baixado. Substitua data/parametros.json no repositório para valer para todos.");
+  });
 }
 
 // Aplica PARAMS em LIMITS e nos textos fixos do painel e da nota de cálculo.
@@ -159,6 +227,7 @@ async function loadSheet() {
   setStatus("loading", "Carregando dados da planilha…");
   await loadParameters();
   applyParameters();
+  renderParamsEditor();
   let table;
   try {
     const res = await fetch(GVIZ_URL, { cache: "no-store" });
@@ -1645,10 +1714,6 @@ async function refreshDxfIndexIfChanged() {
     const before = DXF_INDEX_SIGNATURE;
     await loadDxfIndex(true);
     if (before !== DXF_INDEX_SIGNATURE) await drawMap();
-    if (await loadParameters()) {
-      applyParameters();
-      render();
-    }
   } finally {
     DXF_REFRESH_IN_FLIGHT = false;
   }
@@ -1974,6 +2039,7 @@ function niceStep(raw) {
 }
 
 /* ===================== Boot ===================== */
+setupParamsEditor();
 loadSheet()
   .then(() => startDxfAutoRefresh())
   .catch((e) => console.error(e));
