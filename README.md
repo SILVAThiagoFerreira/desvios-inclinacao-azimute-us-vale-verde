@@ -89,6 +89,7 @@ O bloco "Aderência em planta" compara, em cada plano, o collar previsto com o c
 - **Cores:** verde, dentro nos dois eixos; âmbar, fora só em Z; vermelho, fora em XY; azul,
   realizado sem previsto correspondente (não entra no cálculo); anel tracejado, previsto sem
   furo realizado.
+- O botão "Ampliar em janela" abre o mesmo mapa em uma janela maior, com zoom e arraste, sem sair da página.
 - Os filtros de ANO, MÊS e PLANO valem para o bloco. Sem filtro de período, os previstos sem
   furo realizado também aparecem.
 

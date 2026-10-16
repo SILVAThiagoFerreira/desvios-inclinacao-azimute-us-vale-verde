@@ -297,6 +297,9 @@ function setupPlantaMap() {
   document.getElementById("planta-zoom-in")?.addEventListener("click", () => zoomPlanta(0.8));
   document.getElementById("planta-zoom-out")?.addEventListener("click", () => zoomPlanta(1.25));
   document.getElementById("planta-zoom-reset")?.addEventListener("click", resetPlantaView);
+  document.getElementById("planta-open-dialog")?.addEventListener("click", openPlantaDialog);
+  document.getElementById("planta-dialog-close")?.addEventListener("click", () => document.getElementById("planta-dialog")?.close());
+  document.getElementById("planta-dialog")?.addEventListener("close", restorePlantaWrap);
 }
 
 function clearPlantaHover() {
@@ -464,14 +467,14 @@ const plantaLabelsPlugin = {
     bars.forEach((bar, i) => {
       const pct = opts.pct[i];
       if (pct != null && isFinite(pct)) {
-        ctx.font = `700 12px ${family}`;
+        ctx.font = `700 9px ${family}`;
         ctx.fillStyle = PLANTA_COLORS.green;
         ctx.textBaseline = "bottom";
-        ctx.fillText(pct2(pct), bar.x, bar.y - 4);
+        ctx.fillText(pct2(pct), bar.x, bar.y - 3);
       }
       const count = opts.furos[i];
-      if (count > 0 && bar.base - bar.y > 18) {
-        ctx.font = `700 11px ${family}`;
+      if (count > 0 && bar.base - bar.y > 14) {
+        ctx.font = `700 9px ${family}`;
         ctx.fillStyle = "#ffffff";
         ctx.textBaseline = "bottom";
         ctx.fillText(fmtInt(count), bar.x, bar.base - 6);
@@ -499,16 +502,17 @@ function plantaChartConfig(labels, values, furos) {
       responsive: true,
       maintainAspectRatio: false,
       animation: false,
-      layout: { padding: { top: 24 } },
+      layout: { padding: { top: 34 } },
       interaction: { mode: "index", intersect: false },
       plugins: {
         legend: {
           position: "top",
           align: "center",
           labels: {
-            boxWidth: 12,
-            boxHeight: 10,
+            boxWidth: 10,
+            boxHeight: 8,
             color: C.text,
+            font: { size: 11 },
             // Mesma ordem da legenda do design: Aderência, Furos, Meta
             sort: (a, b) => PLANTA_LEGEND_ORDER[a.text] - PLANTA_LEGEND_ORDER[b.text],
           },
@@ -529,12 +533,19 @@ function plantaChartConfig(labels, values, furos) {
       scales: {
         x: {
           grid: { display: false },
-          ticks: { color: C.text, font: { weight: "600" } },
+          ticks: {
+            color: C.text,
+            font: { size: 10, weight: "600" },
+            maxRotation: 45,
+            minRotation: 45,
+            autoSkip: false,
+          },
           border: { color: C.gridStrong },
         },
         y: {
-          min: 0, max: 100,
-          ticks: { color: C.muted, stepSize: 10, callback: (v) => v + "%" },
+          // Folga acima de 100% para os rótulos das barras não encostarem na legenda
+          min: 0, max: 112,
+          ticks: { color: C.muted, font: { size: 10 }, stepSize: 10, callback: (v) => (v <= 100 ? v + "%" : "") },
           grid: { color: C.grid, drawTicks: false },
           border: { display: false },
         },
@@ -671,4 +682,28 @@ async function drawPlanta() {
   if (PLANEJADO_IGNORED) partes.push(`${PLANEJADO_IGNORED} linha(s) da planilha sem coordenadas completas foram ignoradas`);
   if (semDxf.length) partes.push(`sem DXF: ${semDxf.join(", ")}`);
   setPlantaStatus(partes.join(" · "));
+}
+
+/* ---------- Janela ampliada: o mesmo mapa é movido para o diálogo ---------- */
+function openPlantaDialog() {
+  const dlg = document.getElementById("planta-dialog");
+  const body = document.getElementById("planta-dialog-body");
+  const wrap = document.querySelector("#planta-card .planta-map-wrap");
+  const slot = document.getElementById("planta-map-slot");
+  if (!dlg || !body || !wrap || !slot || dlg.open) return;
+  slot.textContent = "Mapa aberto na janela ampliada.";
+  slot.hidden = false;
+  body.appendChild(wrap);
+  dlg.showModal();
+  requestAnimationFrame(() => { if (PLANTA_VIEW) applyPlantaView(); });
+}
+
+function restorePlantaWrap() {
+  const body = document.getElementById("planta-dialog-body");
+  const wrap = body?.querySelector(".planta-map-wrap");
+  const slot = document.getElementById("planta-map-slot");
+  hidePlantaTooltip();
+  if (wrap && slot) slot.parentNode.insertBefore(wrap, slot);
+  if (slot) { slot.hidden = true; slot.textContent = ""; }
+  requestAnimationFrame(() => { if (PLANTA_VIEW) applyPlantaView(); });
 }
