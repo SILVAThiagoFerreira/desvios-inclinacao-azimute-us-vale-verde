@@ -68,6 +68,27 @@ não deve ser editada manualmente.
 O nome-base do DXF deve corresponder ao valor de `PLANO` na planilha. O alias
 legado `PC53.dxf` → `PP53` já está configurado no sincronizador.
 
+## Planta: collar previsto × realizado
+
+O bloco "Aderência em planta" compara, em cada plano, o collar previsto com o collar realizado.
+
+- **Previsto:** planilha `Planejado - Coordenadas Previstas dos Furos (XYZ)`, ID
+  `180XzsGaAuYqcvyZyFUTpTHtdFu97o8jmBrahzwYkBV0`, na pasta do projeto no Google Drive.
+  Use a aba `PLANEJADO` (o site lê a primeira aba) com as colunas `PLANO | Y | X | Z`.
+  Uma linha por furo previsto. `PLANO` deve ser igual ao nome-base do DXF (`PC-22` para
+  `PC-22.dxf`). Coordenadas no mesmo sistema e unidade (metros) dos DXF. A planilha precisa
+  estar com acesso "Qualquer pessoa com o link", como a planilha principal.
+- **Realizado:** ponto do layer `Hole` de cada DXF do plano (mesma fonte do mapa).
+- **Pareamento:** cada collar previsto é ligado ao realizado mais próximo em planta, um para
+  um, até 2,0 m (`COLLAR_MATCH_MAX` em `planta.js`).
+- **Tolerâncias:** XY (distância em planta) ≤ 0,50 m e |Z realizado − Z previsto| ≤ 0,50 m
+  (`COLLAR_TOL_XY` e `COLLAR_TOL_Z` em `planta.js`).
+- **Cores:** verde, dentro nos dois eixos; âmbar, fora só em Z; vermelho, fora em XY; azul,
+  realizado sem previsto correspondente (não entra no cálculo); anel tracejado, previsto sem
+  furo realizado.
+- Os filtros de ANO, MÊS e PLANO valem para o bloco. Sem filtro de período, os previstos sem
+  furo realizado também aparecem.
+
 ## Fonte
 Planilha pública US Vale Verde:
 `https://docs.google.com/spreadsheets/d/1ef7edY0Yye6arldVfOUYDcjI4GvY6g5U/`

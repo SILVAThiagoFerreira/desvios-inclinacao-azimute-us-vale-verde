@@ -260,6 +260,7 @@ async function loadSheet() {
     : "";
   setStatus("ok", `${RECORDS.length} furos carregados${qualityNote}.`);
   document.getElementById("last-update").textContent = "Atualizado em " + nowBR();
+  await loadPlanejado();
   render();
 }
 
@@ -558,6 +559,7 @@ function render() {
   drawDepthByHole(data);
   drawByPlan(data);
   drawMap();
+  drawPlanta();
   drawHist("chart-hist-az", data.map((r) => r.azDelta).filter((v) => v != null), {
     unit: "°", limit: LIMITS.azimuth, bins: 20,
   });
@@ -1717,7 +1719,10 @@ async function refreshDxfIndexIfChanged() {
   try {
     const before = DXF_INDEX_SIGNATURE;
     await loadDxfIndex(true);
-    if (before !== DXF_INDEX_SIGNATURE) await drawMap();
+    if (before !== DXF_INDEX_SIGNATURE) {
+      await drawMap();
+      await drawPlanta();
+    }
   } finally {
     DXF_REFRESH_IN_FLIGHT = false;
   }
@@ -1727,6 +1732,7 @@ function startDxfAutoRefresh() {
   if (DXF_REFRESH_TIMER) return;
   DXF_REFRESH_TIMER = setInterval(() => {
     refreshDxfIndexIfChanged().catch((e) => console.warn("atualização automática dos DXFs falhou:", e));
+    refreshPlanejadoIfChanged().catch((e) => console.warn("atualização das coordenadas previstas falhou:", e));
   }, DXF_REFRESH_MS);
 }
 
