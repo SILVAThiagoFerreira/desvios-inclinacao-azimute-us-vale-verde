@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="./assets/enaex-favicon.png">
   <meta name="description" content="Análise de desvios de inclinação, azimute e profundidade dos furos de perfuração — US Vale Verde.">
   <link rel="preconnect" href="https://docs.google.com">
-  <link rel="stylesheet" href="./styles.css?v=22">
+  <link rel="stylesheet" href="./styles.css?v=23">
 </head>
 <body>
   <header class="topbar">
@@ -155,6 +155,7 @@
       </div>
 
       <div class="chart-block" id="planta-card">
+        <button id="planta-open-dialog" type="button" class="planta-open-btn">Ver todos os planos</button>
         <div class="chart-block__head">
           <p class="chart-block__eyebrow">COLLAR PREVISTO × REALIZADO</p>
           <h2>Aderência em planta</h2>
@@ -176,13 +177,11 @@
               <button id="planta-zoom-in" type="button" class="filter-reset" aria-label="Aproximar">+</button>
               <button id="planta-zoom-out" type="button" class="filter-reset" aria-label="Afastar">−</button>
               <button id="planta-zoom-reset" type="button" class="filter-reset">Redefinir vista</button>
-              <button id="planta-open-dialog" type="button" class="filter-reset">Ampliar em janela</button>
               <span class="planta-map-tools__hint">Roda do mouse: zoom · arraste: mover · duplo clique: redefinir · passe o mouse sobre um furo para ver os detalhes</span>
             </div>
             <svg id="planta-map" class="planta-map" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Planta de todos os planos: collar previsto e realizado"></svg>
             <div id="planta-tooltip" class="planta-tooltip" hidden></div>
           </div>
-          <div id="planta-map-slot" class="planta-map-slot" hidden></div>
         </div>
       </div>
 
@@ -331,8 +330,8 @@
     <div class="planta-dialog__head">
       <div>
         <p class="chart-block__eyebrow">COLLAR PREVISTO × REALIZADO</p>
-        <h2 id="planta-dialog-title">Aderência em planta · janela ampliada</h2>
-        <p>Mesmo filtro da página. Roda do mouse: zoom · arraste: mover · duplo clique: redefinir.</p>
+        <h2 id="planta-dialog-title">Aderência em planta · todos os planos</h2>
+        <p>Mesmo filtro da página. Role a janela para ver todos os planos. Em cada plano: Ctrl + roda do mouse para zoom, arraste para mover, duplo clique para redefinir.</p>
       </div>
       <button id="planta-dialog-close" type="button" class="filter-reset">Fechar</button>
     </div>
@@ -350,7 +349,7 @@
     }
   </script>
   <script type="module" src="./map3d.js?v=12"></script>
-  <script src="./planta.js?v=5"></script>
+  <script src="./planta.js?v=6"></script>
   <script src="./app.js?v=21"></script>
   <script src="./excel-export-v2.js?v=5"></script>
 </body>
