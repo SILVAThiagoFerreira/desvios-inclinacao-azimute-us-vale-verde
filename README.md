@@ -82,7 +82,8 @@ O bloco "Aderência em planta" compara, em cada plano, o collar previsto com o c
 - **Pareamento:** cada collar previsto é ligado ao realizado mais próximo em planta, um para
   um, até 2,0 m (`COLLAR_MATCH_MAX` em `planta.js`).
 - **Tolerâncias:** deslocamento XY (distância em planta) ≤ 2 × diâmetro projetado do furo,
-  com o diâmetro da coluna `DIAMETRO` em polegadas (4 pol = 0,2032 m de limite; 5 pol = 0,254 m).
+  com o diâmetro da coluna `DIAMETRO` em milímetros (101,6 mm = limite de 0,2032 m; 127 mm =
+  limite de 0,254 m; 139,7 mm = limite de 0,2794 m).
   Furos sem diâmetro usam 0,50 m (`COLLAR_TOL_XY`). Z: |Z realizado − Z previsto| ≤ 0,50 m
   (`COLLAR_TOL_Z`). Constantes em `planta.js`.
 - **Cores:** verde, dentro nos dois eixos; âmbar, fora só em Z; vermelho, fora em XY; azul,

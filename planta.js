@@ -17,9 +17,9 @@
 const PLANEJADO_SHEET_ID = "180XzsGaAuYqcvyZyFUTpTHtdFu97o8jmBrahzwYkBV0";
 const PLANEJADO_GVIZ_URL = `https://docs.google.com/spreadsheets/d/${PLANEJADO_SHEET_ID}/gviz/tq?tqx=out:json&headers=1`;
 // Deslocamento XY aceito: 2 vezes o diâmetro projetado do furo. O diâmetro da planilha
-// está em polegadas (ex.: 4 = 4 pol = 101,6 mm), por isso a conversão para metros.
+// está em milímetros (ex.: 101,6 mm; 127 mm; 139,7 mm), por isso a conversão para metros.
 const PLANTA_DISP_FATOR = 2;
-const POL_EM_M = 0.0254;
+const MM_EM_M = 0.001;
 // Fallback para furos sem diâmetro na planilha (metros)
 const COLLAR_TOL_XY = 0.5;
 // Tolerância Z do collar (metros)
@@ -168,9 +168,9 @@ function plantaVisibleIds(plano, tf) {
     .map((r) => String(Number(r.id))));
 }
 
-/* Limite XY do furo, em metros: 2 × diâmetro projetado (pol) convertido para metros. */
+/* Limite XY do furo, em metros: 2 × diâmetro projetado (mm) convertido para metros. */
 function tolXY(p) {
-  return p && p.d != null ? PLANTA_DISP_FATOR * p.d * POL_EM_M : COLLAR_TOL_XY;
+  return p && p.d != null ? PLANTA_DISP_FATOR * p.d * MM_EM_M : COLLAR_TOL_XY;
 }
 
 function plantaStatus(m) {
@@ -341,7 +341,7 @@ function buildPlantaTooltip(tip, item) {
     const lim = tolXY(item.p);
     add("Δ XY", `${fmtNum(item.dxy, 3)} m (limite ${fmtNum(lim, 3)} m)`);
     add("Δ Z", `${item.dz >= 0 ? "+" : ""}${fmtNum(item.dz, 2)} m (limite ±${fmtNum(COLLAR_TOL_Z, 2)} m)`);
-    add("Diâmetro", item.p.d != null ? `${fmtDiam(item.p.d)} pol` : "não informado (limite XY padrão)");
+    add("Diâmetro", item.p.d != null ? `${fmtDiam(item.p.d)} mm` : "não informado (limite XY padrão)");
   }
   if (plan && plan.n) {
     add("Aderência do plano", `XY ${pct2(plan.xyPct)} · Z ${pct2(plan.zPct)} · ${fmtInt(plan.n)} furos`);
