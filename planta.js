@@ -65,6 +65,7 @@ let PLANTA_DRAG = null;
 let PLANTA_HOVER = null;
 
 const pct2 = (n) => n == null || !isFinite(n) ? "—" : fmtNum(n, 2) + "%";
+const fmtDiam = (d) => new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 }).format(d);
 
 function toNumber(v) {
   if (typeof v === "number") return v;
@@ -93,7 +94,7 @@ function buildPlanejado(table) {
     if (!isFinite(x) || !isFinite(y) || !isFinite(z)) { ignored++; return; }
     const d = iD === undefined ? NaN : toNumber(cell(iD));
     if (!plans.has(plano)) plans.set(plano, []);
-    plans.get(plano).push({ x, y, z, d: isFinite(d) ? d : null });
+    plans.get(plano).push({ x, y, z, d: isFinite(d) && d > 0 ? d : null });
   });
   return { plans, ignored };
 }
@@ -113,8 +114,7 @@ async function loadPlanejado() {
     PLANEJADO_SIGNATURE = JSON.stringify([...PLANEJADO]);
   } catch (e) {
     console.warn("coordenadas previstas indisponíveis:", e);
-    PLANEJADO = null;
-    PLANEJADO_IGNORED = 0;
+    // Mantém a última leitura válida; uma falha transitória não apaga o mapa.
     PLANEJADO_ERROR = e.message && e.message.startsWith("A aba")
       ? e.message
       : "Não foi possível ler as coordenadas previstas (aba PLANEJADO). Confirme que a planilha está com acesso “Qualquer pessoa com o link”.";
@@ -253,6 +253,7 @@ function onPlantaWheel(e) {
 }
 
 function onPlantaDown(e) {
+  if (!PLANTA_VIEW) return;
   if (e.button !== 0 && e.button !== 1) return;
   PLANTA_DRAG = { x: e.clientX, y: e.clientY, vx: PLANTA_VIEW.x, vy: PLANTA_VIEW.y };
   try { PLANTA_SVG.setPointerCapture(e.pointerId); } catch (_) { /* ponteiro já liberado */ }
@@ -261,7 +262,7 @@ function onPlantaDown(e) {
 }
 
 function onPlantaMove(e) {
-  if (PLANTA_DRAG) {
+  if (PLANTA_DRAG && PLANTA_VIEW) {
     const s = plantaScale();
     PLANTA_VIEW.x = PLANTA_DRAG.vx - (e.clientX - PLANTA_DRAG.x) / s;
     PLANTA_VIEW.y = PLANTA_DRAG.vy - (e.clientY - PLANTA_DRAG.y) / s;
@@ -291,6 +292,8 @@ function setupPlantaMap() {
   svg.addEventListener("pointercancel", onPlantaUp);
   svg.addEventListener("pointerleave", hidePlantaTooltip);
   svg.addEventListener("dblclick", resetPlantaView);
+  // Os marcadores mantêm o tamanho em pixels quando a janela muda de largura
+  window.addEventListener("resize", () => { if (PLANTA_VIEW) applyPlantaView(); });
   document.getElementById("planta-zoom-in")?.addEventListener("click", () => zoomPlanta(0.8));
   document.getElementById("planta-zoom-out")?.addEventListener("click", () => zoomPlanta(1.25));
   document.getElementById("planta-zoom-reset")?.addEventListener("click", resetPlantaView);
@@ -338,7 +341,7 @@ function buildPlantaTooltip(tip, item) {
     const lim = tolXY(item.p);
     add("Δ XY", `${fmtNum(item.dxy, 3)} m (limite ${fmtNum(lim, 3)} m)`);
     add("Δ Z", `${item.dz >= 0 ? "+" : ""}${fmtNum(item.dz, 2)} m (limite ±${fmtNum(COLLAR_TOL_Z, 2)} m)`);
-    add("Diâmetro", item.p.d != null ? `${fmtNum(item.p.d, 0)} pol` : "não informado (limite XY padrão)");
+    add("Diâmetro", item.p.d != null ? `${fmtDiam(item.p.d)} pol` : "não informado (limite XY padrão)");
   }
   if (plan && plan.n) {
     add("Aderência do plano", `XY ${pct2(plan.xyPct)} · Z ${pct2(plan.zPct)} · ${fmtInt(plan.n)} furos`);
@@ -402,10 +405,11 @@ function renderPlantaMap(items, key) {
     PLANTA_KEY = "";
     return;
   }
-  PLANTA_ORIGIN = { x: minX, y: maxY };
-  PLANTA_BOUNDS = { w: maxX - minX, h: maxY - minY };
+  // A origem só muda quando o filtro muda; assim a vista não salta no auto-refresh.
   if (key !== PLANTA_KEY || !PLANTA_VIEW) {
     PLANTA_KEY = key;
+    PLANTA_ORIGIN = { x: minX, y: maxY };
+    PLANTA_BOUNDS = { w: maxX - minX, h: maxY - minY };
     fitPlantaView();
   }
   const lx = (q) => q.x - PLANTA_ORIGIN.x;
@@ -562,10 +566,11 @@ async function drawPlanta() {
   if (subtitle) {
     subtitle.textContent = `Todos os planos do filtro em uma só planta · deslocamento XY até 2 × diâmetro projetado do furo · Z ±${fmtNum(COLLAR_TOL_Z, 2)} m · cada collar previsto é pareado ao realizado mais próximo (até ${fmtNum(COLLAR_MATCH_MAX, 1)} m).`;
   }
-  if (charts) charts.hidden = true;
   setupPlantaMap();
 
   const clearAll = () => {
+    const ch = document.getElementById("planta-charts");
+    if (ch) ch.hidden = true;
     PLANTA_PLANS = new Map();
     renderPlantaMap([], "");
     destroy("plantaXY");
@@ -597,7 +602,10 @@ async function drawPlanta() {
   }
   setPlantaStatus("Carregando geometria dos planos…");
 
-  const results = await Promise.all(candidatos.map((p) => fetchDxfHoles(p).then((h) => ({ plano: p, holes: h }))));
+  // Falha ao obter o DXF de um plano vira "sem DXF" e não derruba o bloco inteiro
+  const results = await Promise.all(candidatos.map((p) => fetchDxfHoles(p)
+    .then((h) => ({ plano: p, holes: h }))
+    .catch(() => ({ plano: p, holes: null }))));
   if (token !== PLANTA_TOKEN) return;
 
   const planos = [];
@@ -659,6 +667,7 @@ async function drawPlanta() {
   if (charts) charts.hidden = false;
 
   const partes = [];
+  if (PLANEJADO_ERROR) partes.push(`${PLANEJADO_ERROR} (mostrando a última leitura)`);
   if (PLANEJADO_IGNORED) partes.push(`${PLANEJADO_IGNORED} linha(s) da planilha sem coordenadas completas foram ignoradas`);
   if (semDxf.length) partes.push(`sem DXF: ${semDxf.join(", ")}`);
   setPlantaStatus(partes.join(" · "));

@@ -891,7 +891,7 @@ body {
 }
 .planta-map.is-dragging { cursor: grabbing; }
 .planta-ring {
-  fill: none;
+  fill: transparent;
   stroke: #7b858d;
   stroke-width: 1.1px;
   vector-effect: non-scaling-stroke;
@@ -937,3 +937,13 @@ body {
 .planta-tooltip__list dt { color: var(--muted); }
 .planta-tooltip__list dd { margin: 0; }
 .planta-charts[hidden] { display: none; }
+
+/* Mensagens do bloco de planta ficam no fluxo, acima do mapa */
+#planta-status.map-status {
+  position: static;
+  inset: auto;
+  background: none;
+  padding: 0 0 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
