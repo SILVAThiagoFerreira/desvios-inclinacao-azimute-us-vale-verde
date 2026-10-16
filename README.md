@@ -90,6 +90,7 @@ O bloco "Aderência em planta" compara, em cada plano, o collar previsto com o c
   realizado sem previsto correspondente (não entra no cálculo); anel tracejado, previsto sem
   furo realizado.
 - O botão vermelho "Ver todos os planos", no canto superior direito do bloco, abre uma janela com um bloco de planta por plano do filtro. Role a janela para ver todos; em cada plano, Ctrl + roda do mouse dá zoom e o arraste move.
+- A janela "Ver todos os planos" tem os botões "Exportar PDF" e "Exportar imagem", que geram um documento com todos os planos do filtro e os gráficos XY e Z. Clicar fora da janela fecha. A barra de status só aparece em carregamento ou erro.
 - Os filtros de ANO, MÊS e PLANO valem para o bloco. Sem filtro de período, os previstos sem
   furo realizado também aparecem.
 

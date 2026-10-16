@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="./assets/enaex-favicon.png">
   <meta name="description" content="Análise de desvios de inclinação, azimute e profundidade dos furos de perfuração — US Vale Verde.">
   <link rel="preconnect" href="https://docs.google.com">
-  <link rel="stylesheet" href="./styles.css?v=23">
+  <link rel="stylesheet" href="./styles.css?v=24">
 </head>
 <body>
   <header class="topbar">
@@ -47,7 +47,6 @@
       <span class="status__dot" id="status-dot"></span>
       <span id="status-text">Carregando…</span>
       <span class="status__spacer"></span>
-      <span class="status__time" id="last-update"></span>
     </p>
 
     <div class="active-filters" id="active-filters" style="display:none"></div>
@@ -333,8 +332,13 @@
         <h2 id="planta-dialog-title">Aderência em planta · todos os planos</h2>
         <p>Mesmo filtro da página. Role a janela para ver todos os planos. Em cada plano: Ctrl + roda do mouse para zoom, arraste para mover, duplo clique para redefinir.</p>
       </div>
-      <button id="planta-dialog-close" type="button" class="filter-reset">Fechar</button>
+      <div class="planta-dialog__actions">
+        <button id="planta-dialog-pdf" type="button" class="planta-dialog__btn">Exportar PDF</button>
+        <button id="planta-dialog-png" type="button" class="planta-dialog__btn">Exportar imagem</button>
+        <button id="planta-dialog-close" type="button" class="filter-reset">Fechar</button>
+      </div>
     </div>
+    <p id="planta-dialog-status" class="planta-dialog__status" aria-live="polite" hidden></p>
     <div id="planta-dialog-body" class="planta-dialog__body"></div>
   </dialog>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
@@ -349,8 +353,8 @@
     }
   </script>
   <script type="module" src="./map3d.js?v=12"></script>
-  <script src="./planta.js?v=6"></script>
-  <script src="./app.js?v=21"></script>
+  <script src="./planta.js?v=7"></script>
+  <script src="./app.js?v=22"></script>
   <script src="./excel-export-v2.js?v=5"></script>
 </body>
 </html>

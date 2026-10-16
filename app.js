@@ -82,6 +82,7 @@ const DATA_QUALITY = { dateMismatches: 0 };
 /* ===================== Status ===================== */
 function setStatus(kind, text) {
   const el = document.getElementById("status");
+  el.hidden = kind === "ok";
   el.classList.remove("is-loading", "is-ok", "is-error");
   if (kind) el.classList.add("is-" + kind);
   document.getElementById("status-text").textContent = text;
@@ -255,11 +256,8 @@ async function loadSheet() {
   }
   populateFilters();
   setupExport();
-  const qualityNote = DATA_QUALITY.dateMismatches
-    ? ` · ${DATA_QUALITY.dateMismatches} registro(s) com Ano/Mês corrigido(s) pela Data`
-    : "";
-  setStatus("ok", `${RECORDS.length} furos carregados${qualityNote}.`);
-  document.getElementById("last-update").textContent = "Atualizado em " + nowBR();
+  // Sem mensagem de sucesso no topo; a barra de status aparece só em carregamento ou erro
+  setStatus("ok", "");
   await loadPlanejado();
   render();
 }

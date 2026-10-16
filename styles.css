@@ -1092,3 +1092,34 @@ body {
   #planta-card > .chart-block__head { padding-right: 0; }
   .planta-open-btn { position: static; margin: 0 0 12px; }
 }
+
+/* Barra de status: some quando tudo carregou (mensagem de sucesso removida) */
+.status[hidden] { display: none; }
+
+/* Ações da janela "Ver todos os planos" */
+.planta-dialog__actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.planta-dialog__btn {
+  padding: 9px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1f5b3a;
+  background: #ffffff;
+  border: 1px solid #1f5b3a;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.planta-dialog__btn:hover { background: #eef5f0; }
+.planta-dialog__status {
+  margin: 0;
+  padding: 6px 18px;
+  font-size: 12px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--rule);
+}
+.planta-dialog__status[hidden] { display: none; }
+
+/* Gráficos XY e Z no fim da janela */
+.planta-dialog__charts { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--rule); }
+.planta-dialog__chart-title { margin: 14px 0 0; font-size: 13px; font-weight: 700; color: var(--red); letter-spacing: 0.02em; }
+.planta-dialog__chart-sub { margin: 2px 0 6px; font-size: 11px; color: var(--muted); }
+.planta-dialog__chart-box { position: relative; height: 340px; }

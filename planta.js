@@ -303,6 +303,10 @@ function setupPlantaMap() {
   document.getElementById("planta-open-dialog")?.addEventListener("click", openPlantaDialog);
   document.getElementById("planta-dialog-close")?.addEventListener("click", () => document.getElementById("planta-dialog")?.close());
   document.getElementById("planta-dialog")?.addEventListener("close", closePlantaDialog);
+  document.getElementById("planta-dialog-pdf")?.addEventListener("click", exportPlantaPdf);
+  document.getElementById("planta-dialog-png")?.addEventListener("click", exportPlantaImagem);
+  const dlgEl = document.getElementById("planta-dialog");
+  dlgEl?.addEventListener("click", (e) => { if (e.target === dlgEl) dlgEl.close(); });
 }
 
 function clearPlantaHover() {
@@ -637,6 +641,7 @@ async function drawPlanta() {
   const all = plantaMetrics(planos.flatMap((p) => p.matches));
   const labels = [...rows.map((r) => r.plano), "TOTAL"];
   const furos = [...rows.map((r) => r.n), all.n];
+  PLANTA_CHART_DATA = { labels, xy: [...rows.map((r) => r.xyPct), all.xyPct], z: [...rows.map((r) => r.zPct), all.zPct], furos };
   destroy("plantaXY");
   destroy("plantaZ");
   CHARTS.plantaXY = new Chart(document.getElementById("planta-chart-xy"),
@@ -655,6 +660,7 @@ async function drawPlanta() {
 
 /* ---------- Desenho compartilhado: pontos, anéis e ligações ---------- */
 let PLANTA_CARDS = []; // cards da janela "Ver todos os planos" (para redimensionar)
+let PLANTA_CHART_DATA = null; // dados dos gráficos XY e Z do último desenho
 
 function plantaDrawItems(content, items, origin, sized) {
   const lx = (q) => q.x - origin.x;
@@ -878,6 +884,8 @@ function renderPlanDialog() {
   const body = document.getElementById("planta-dialog-body");
   if (!dlg || !body || !dlg.open) return;
   PLANTA_CARDS = [];
+  destroy("plantaDlgXY");
+  destroy("plantaDlgZ");
   body.replaceChildren();
   if (!PLANTA_PLANS.size) {
     const empty = document.createElement("p");
@@ -893,6 +901,38 @@ function renderPlanDialog() {
     grid.appendChild(buildPlantaCard(plano, items));
   });
   body.appendChild(grid);
+  if (PLANTA_CHART_DATA) body.appendChild(buildPlanDialogCharts());
+}
+
+/* Gráficos XY e Z no fim da janela */
+function buildPlanDialogCharts() {
+  const section = document.createElement("section");
+  section.className = "planta-dialog__charts";
+  const titles = [
+    ["XY", "Furos com distância previsto × realizado em planta dentro da tolerância XY", "planta-dlg-chart-xy"],
+    ["Z", "Furos com cota realizada dentro da tolerância Z em relação ao previsto", "planta-dlg-chart-z"],
+  ];
+  titles.forEach(([name, text, id]) => {
+    const head = document.createElement("h3");
+    head.className = "planta-dialog__chart-title";
+    head.textContent = name;
+    const sub = document.createElement("p");
+    sub.className = "planta-dialog__chart-sub";
+    sub.textContent = text;
+    const box = document.createElement("div");
+    box.className = "planta-dialog__chart-box";
+    const canvas = document.createElement("canvas");
+    canvas.id = id;
+    box.appendChild(canvas);
+    section.append(head, sub, box);
+  });
+  // os canvas já estão no documento quando os gráficos são criados
+  queueMicrotask(() => {
+    const { labels, xy, z, furos } = PLANTA_CHART_DATA;
+    CHARTS.plantaDlgXY = new Chart(document.getElementById("planta-dlg-chart-xy"), plantaChartConfig(labels, xy, furos));
+    CHARTS.plantaDlgZ = new Chart(document.getElementById("planta-dlg-chart-z"), plantaChartConfig(labels, z, furos));
+  });
+  return section;
 }
 
 function openPlantaDialog() {
@@ -905,5 +945,231 @@ function openPlantaDialog() {
 function closePlantaDialog() {
   const body = document.getElementById("planta-dialog-body");
   PLANTA_CARDS = [];
+  destroy("plantaDlgXY");
+  destroy("plantaDlgZ");
   if (body) body.replaceChildren();
+  setPlanDialogStatus("");
+}
+
+function setPlanDialogStatus(text) {
+  const el = document.getElementById("planta-dialog-status");
+  if (!el) return;
+  el.textContent = text || "";
+  el.hidden = !text;
+}
+
+/* ---------- Exportação: imagem (PNG) e PDF com todos os planos e os gráficos ---------- */
+const PLANTA_JSPDF_URL = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+let PLANTA_JSPDF_PROMISE = null;
+
+function loadJsPdf() {
+  if (window.jspdf && window.jspdf.jsPDF) return Promise.resolve(window.jspdf.jsPDF);
+  if (!PLANTA_JSPDF_PROMISE) {
+    PLANTA_JSPDF_PROMISE = new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = PLANTA_JSPDF_URL;
+      s.onload = () => (window.jspdf && window.jspdf.jsPDF
+        ? resolve(window.jspdf.jsPDF)
+        : reject(new Error("Gerador de PDF indisponível")));
+      s.onerror = () => {
+        PLANTA_JSPDF_PROMISE = null;
+        reject(new Error("Não foi possível carregar o gerador de PDF"));
+      };
+      document.head.appendChild(s);
+    });
+  }
+  return PLANTA_JSPDF_PROMISE;
+}
+
+function plantaExportSubtitle() {
+  const sel = (id) => {
+    const el = document.getElementById(id);
+    const opt = el && el.selectedOptions && el.selectedOptions[0];
+    return opt && opt.value ? opt.text : "todos";
+  };
+  return `Ano: ${sel("filter-year")} · Mês: ${sel("filter-month")} · Plano: ${sel("filter-plan")} · Gerado em ${new Date().toLocaleString("pt-BR")}`;
+}
+
+function drawPlantaCardCanvas(ctx, x, y, w, h, plano, items, m) {
+  const HEAD_H = 40;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = "#e6e8ea";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  ctx.fillStyle = PLANTA_COLORS.green;
+  ctx.fillRect(x, y, w, HEAD_H);
+  ctx.fillStyle = "#ffffff";
+  ctx.textBaseline = "middle";
+  ctx.font = "700 15px Arial";
+  ctx.textAlign = "left";
+  ctx.fillText(plano, x + 14, y + HEAD_H / 2);
+  ctx.font = "11.5px Arial";
+  ctx.textAlign = "right";
+  ctx.fillText(`${fmtInt(m.n)} furos · XY ${pct2(m.xyPct)} · Z ${pct2(m.zPct)}`, x + w - 14, y + HEAD_H / 2);
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+
+  const mx = x, my = y + HEAD_H, mw = w, mh = h - HEAD_H;
+  ctx.fillStyle = "#fbfbfc";
+  ctx.fillRect(mx, my, mw, mh);
+  if (!items.length) {
+    ctx.fillStyle = "#6c747b";
+    ctx.font = "13px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("Sem furos no filtro atual", mx + mw / 2, my + mh / 2);
+    ctx.textAlign = "left";
+    return;
+  }
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  const pushPt = (q) => {
+    if (q.x < minX) minX = q.x;
+    if (q.x > maxX) maxX = q.x;
+    if (q.y < minY) minY = q.y;
+    if (q.y > maxY) maxY = q.y;
+  };
+  items.forEach((it) => { if (it.p) pushPt(it.p); if (it.r) pushPt(it.r); });
+  const pad = 28;
+  const rangeX = Math.max(maxX - minX, 1);
+  const rangeY = Math.max(maxY - minY, 1);
+  const s = Math.min((mw - pad * 2) / rangeX, (mh - pad * 2) / rangeY);
+  const ox = mx + (mw - rangeX * s) / 2;
+  const oy = my + (mh - rangeY * s) / 2;
+  const tx = (q) => ox + (q.x - minX) * s;
+  const ty = (q) => oy + (maxY - q.y) * s;
+
+  ctx.strokeStyle = PLANTA_COLORS.link;
+  ctx.lineWidth = 1;
+  items.forEach((it) => {
+    if (it.kind !== "match") return;
+    ctx.beginPath();
+    ctx.moveTo(tx(it.p), ty(it.p));
+    ctx.lineTo(tx(it.r), ty(it.r));
+    ctx.stroke();
+  });
+  items.forEach((it) => {
+    if (it.kind !== "match" && it.kind !== "planned") return;
+    ctx.beginPath();
+    ctx.arc(tx(it.p), ty(it.p), 4, 0, Math.PI * 2);
+    ctx.strokeStyle = PLANTA_COLORS.planned;
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash(it.kind === "planned" ? [3, 3] : []);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  });
+  items.forEach((it) => {
+    if (it.kind !== "match" && it.kind !== "realized") return;
+    const color = it.kind === "match" ? PLANTA_COLORS[plantaStatus(it)] : PLANTA_COLORS.blue;
+    ctx.beginPath();
+    ctx.arc(tx(it.r), ty(it.r), 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 0.6;
+    ctx.stroke();
+  });
+}
+
+/* Gera a imagem completa: título, um bloco por plano e os gráficos XY e Z. Escala 2x. */
+function buildPlantaExportCanvas() {
+  const DPR = 2;
+  const M = 32, GAP = 24, CARD_W = 640, CARD_H = 400, COLS = 2, HEAD = 96;
+  const CHART_H = 340;
+  const plans = [...PLANTA_PLANS.keys()];
+  const rows = Math.max(1, Math.ceil(plans.length / COLS));
+  const gridH = rows * CARD_H + (rows - 1) * GAP;
+  const W = M * 2 + CARD_W * COLS + GAP;
+  const chartsTop = HEAD + gridH + 40;
+  const chartsH = PLANTA_CHART_DATA ? 2 * (24 + CHART_H) + 36 : 0;
+  const H = chartsTop + chartsH + M;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = W * DPR;
+  canvas.height = H * DPR;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(DPR, DPR);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.fillStyle = "#38424B";
+  ctx.font = "700 20px Arial";
+  ctx.fillText("Aderência em planta · todos os planos", M, M + 20);
+  ctx.fillStyle = "#6c747b";
+  ctx.font = "12px Arial";
+  ctx.fillText(plantaExportSubtitle(), M, M + 42);
+
+  plans.forEach((plano, i) => {
+    const col = i % COLS;
+    const row = Math.floor(i / COLS);
+    const x = M + col * (CARD_W + GAP);
+    const y = HEAD + row * (CARD_H + GAP);
+    const items = PLANTA_ITEMS.filter((it) => it.plano === plano);
+    drawPlantaCardCanvas(ctx, x, y, CARD_W, CARD_H, plano, items, PLANTA_PLANS.get(plano));
+  });
+
+  if (PLANTA_CHART_DATA) {
+    const { labels, xy, z, furos } = PLANTA_CHART_DATA;
+    const specs = [
+      ["XY · furos com distância previsto × realizado dentro da tolerância XY", xy],
+      ["Z · furos com cota realizada dentro da tolerância Z", z],
+    ];
+    let y = chartsTop;
+    specs.forEach(([title, values]) => {
+      ctx.fillStyle = "#38424B";
+      ctx.font = "700 14px Arial";
+      ctx.fillText(title, M, y + 14);
+      const holder = document.createElement("div");
+      holder.style.cssText = `position:fixed;left:-20000px;top:0;width:${W - M * 2}px;height:${CHART_H}px;`;
+      const cv = document.createElement("canvas");
+      holder.appendChild(cv);
+      document.body.appendChild(holder);
+      const cfg = plantaChartConfig(labels, values, furos);
+      cfg.options.devicePixelRatio = DPR;
+      cfg.options.animation = false;
+      const chart = new Chart(cv, cfg);
+      ctx.drawImage(chart.canvas, M, y + 24, W - M * 2, CHART_H);
+      chart.destroy();
+      holder.remove();
+      y += 24 + CHART_H + 36;
+    });
+  }
+  return canvas;
+}
+
+function downloadPlantaBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+function exportPlantaImagem() {
+  setPlanDialogStatus("Gerando imagem…");
+  const canvas = buildPlantaExportCanvas();
+  canvas.toBlob((blob) => {
+    if (!blob) { setPlanDialogStatus("Não foi possível gerar a imagem."); return; }
+    downloadPlantaBlob(blob, "planta-todos-os-planos.png");
+    setPlanDialogStatus("");
+  }, "image/png");
+}
+
+async function exportPlantaPdf() {
+  setPlanDialogStatus("Gerando PDF…");
+  try {
+    const JsPDF = await loadJsPdf();
+    const canvas = buildPlantaExportCanvas();
+    const W = canvas.width / 2;
+    const H = canvas.height / 2;
+    const pdf = new JsPDF({ orientation: W >= H ? "landscape" : "portrait", unit: "px", format: [W, H], compress: true });
+    pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, W, H);
+    pdf.save("planta-todos-os-planos.pdf");
+    setPlanDialogStatus("");
+  } catch (e) {
+    console.warn("exportação em PDF falhou:", e);
+    setPlanDialogStatus(e.message || "Não foi possível gerar o PDF.");
+  }
 }
