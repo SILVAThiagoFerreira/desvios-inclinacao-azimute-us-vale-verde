@@ -68,6 +68,13 @@ não deve ser editada manualmente.
 O nome-base do DXF deve corresponder ao valor de `PLANO` na planilha. O alias
 legado `PC53.dxf` → `PP53` já está configurado no sincronizador.
 
+## Responsividade
+
+- Celular (até 560 px): janela "Ver todos os planos" em tela cheia, um bloco por linha, botão a largura total e gráficos de planta com rolagem horizontal.
+- Tablet (561 a 980 px): gráficos em coluna única e KPIs em duas colunas.
+- Computador: layout completo, com largura máxima de 1440 px.
+- TV (a partir de 1800 px): a página é ampliada em 30%; a partir de 2800 px, em 70%.
+
 ## Planta: collar previsto × realizado
 
 O bloco "Aderência em planta" compara, em cada plano, o collar previsto com o collar realizado.

@@ -1123,3 +1123,51 @@ body {
 .planta-dialog__chart-title { margin: 14px 0 0; font-size: 13px; font-weight: 700; color: var(--red); letter-spacing: 0.02em; }
 .planta-dialog__chart-sub { margin: 2px 0 6px; font-size: 11px; color: var(--muted); }
 .planta-dialog__chart-box { position: relative; height: 340px; }
+
+/* ===================== Responsividade: celular, tablet, computador e TV ===================== */
+
+/* Gráficos da planta: em tela pequena, rolam na horizontal em vez de sobrepor os rótulos */
+.chart-scroll { position: relative; width: 100%; height: 340px; }
+.chart-scroll > canvas { display: block; }
+
+@media (max-width: 900px) {
+  .planta-charts .chart-block__body--tall,
+  .planta-dialog__chart-box { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .chart-scroll { min-width: 980px; }
+}
+
+/* Celular: mapa, legenda e controles da planta mais compactos */
+@media (max-width: 560px) {
+  .planta-map { height: 360px; }
+  .planta-map-tools__hint { display: none; }
+  .planta-legend { font-size: 11px; gap: 6px 12px; }
+  .planta-open-btn { width: 100%; text-align: center; }
+}
+
+/* Celular: a janela "Ver todos os planos" ocupa a tela inteira */
+@media (max-width: 560px) {
+  .planta-dialog {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    max-width: 100vw;
+    max-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+  .planta-dialog__head { flex-direction: column; align-items: stretch; padding: 12px 14px; }
+  .planta-dialog__actions { justify-content: stretch; }
+  .planta-dialog__actions > * { flex: 1 1 auto; text-align: center; }
+  .planta-dialog__body { padding: 10px 12px 14px; }
+  .planta-dialog__grid { grid-template-columns: 1fr; }
+  .planta-card__svg { height: 300px; }
+  .planta-card__tools { flex-wrap: wrap; }
+}
+
+/* TV e telas grandes: a página inteira aumenta para ficar legível a distância */
+@media (min-width: 1800px) {
+  html { zoom: 1.3; }
+}
+@media (min-width: 2800px) {
+  html { zoom: 1.7; }
+}

@@ -921,9 +921,12 @@ function buildPlanDialogCharts() {
     sub.textContent = text;
     const box = document.createElement("div");
     box.className = "planta-dialog__chart-box";
+    const scroll = document.createElement("div");
+    scroll.className = "chart-scroll";
     const canvas = document.createElement("canvas");
     canvas.id = id;
-    box.appendChild(canvas);
+    scroll.appendChild(canvas);
+    box.appendChild(scroll);
     section.append(head, sub, box);
   });
   // os canvas já estão no documento quando os gráficos são criados
