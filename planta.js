@@ -1,13 +1,14 @@
 /* =====================================================================
    Planta: collar previsto × collar realizado
-   - Previsto (X, Y, Z): planilha "Planejado - Coordenadas Previstas dos
-     Furos (XYZ)", aba PLANEJADO, colunas PLANO | Y | X | Z.
+   - Previsto (PLANO, Y, X, Z e DIAMETRO): planilha "Planejado - Coordenadas
+     Previstas dos Furos (XYZ)", primeira aba.
    - Realizado: ponto do layer "Hole" de cada DXF (mesmo PLANO = nome-base
      do arquivo DXF). Usa as mesmas fontes de fetchDxfHoles() do mapa.
    Pareamento: para cada plano, cada collar previsto é ligado ao collar
    realizado mais próximo em planta (um para um, do menor para o maior
    desvio), até COLLAR_MATCH_MAX metros.
-   Este arquivo depende de app.js (RECORDS, fetchDxfHoles, parseGviz,
+   Mapa 2D único com todos os planos do filtro, com zoom, arrastar e
+   tooltip por furo. Depende de app.js (RECORDS, fetchDxfHoles, parseGviz,
    norm, destroy, CHARTS, C, LIMITS, fmtNum, fmtInt).
    ===================================================================== */
 
@@ -15,12 +16,18 @@
 // (que deve se chamar PLANEJADO), por isso o parâmetro "sheet" não é enviado.
 const PLANEJADO_SHEET_ID = "180XzsGaAuYqcvyZyFUTpTHtdFu97o8jmBrahzwYkBV0";
 const PLANEJADO_GVIZ_URL = `https://docs.google.com/spreadsheets/d/${PLANEJADO_SHEET_ID}/gviz/tq?tqx=out:json&headers=1`;
-// Tolerâncias do collar (metros). Valores padrão do painel; ajustar aqui se mudar a norma.
+// Deslocamento XY aceito: 2 vezes o diâmetro projetado do furo. O diâmetro da planilha
+// está em polegadas (ex.: 4 = 4 pol = 101,6 mm), por isso a conversão para metros.
+const PLANTA_DISP_FATOR = 2;
+const POL_EM_M = 0.0254;
+// Fallback para furos sem diâmetro na planilha (metros)
 const COLLAR_TOL_XY = 0.5;
+// Tolerância Z do collar (metros)
 const COLLAR_TOL_Z = 0.5;
 // Distância máxima para parear um collar previsto a um realizado (metros).
 const COLLAR_MATCH_MAX = 2.0;
 
+const PLANTA_NS = "http://www.w3.org/2000/svg";
 const PLANTA_COLORS = {
   green: "#1f5b3a",   // cabeçalhos e barras de aderência
   gold: "#b8860b",    // linha de meta
@@ -31,14 +38,31 @@ const PLANTA_COLORS = {
   planned: "#7b858d", // collar previsto
   link: "#b9c0c6",    // linha entre previsto e realizado
 };
-
+const PLANTA_STATUS_LABEL = {
+  ok: "Dentro nos dois eixos",
+  amber: "Fora só em Z",
+  red: "Fora em XY",
+};
 const PLANTA_LEGEND_ORDER = { "Aderência": 0, "Furos": 1, "Meta": 2 };
 
-let PLANEJADO = null;          // Map(plano -> [{ x, y, z }])
+let PLANEJADO = null;          // Map(plano -> [{ x, y, z, d }])
 let PLANEJADO_IGNORED = 0;     // linhas sem coordenadas completas
 let PLANEJADO_ERROR = "";
 let PLANEJADO_SIGNATURE = "";
 let PLANTA_TOKEN = 0;
+
+// Estado do mapa 2D (coordenadas locais: x = X - OX, y = OY - Y, em metros)
+let PLANTA_SVG = null;
+let PLANTA_CONTENT = null;
+let PLANTA_VIEW = null;        // { x, y, w, h } da viewBox
+let PLANTA_BOUNDS = null;      // { w, h } extensão total dos dados
+let PLANTA_KEY = "";           // chave do filtro; muda → refaz o enquadramento
+let PLANTA_ORIGIN = { x: 0, y: 0 };
+let PLANTA_SIZED = [];         // [{ el, px }] círculos com raio em pixels
+let PLANTA_ITEMS = [];         // itens do mapa, indexados por data-idx
+let PLANTA_PLANS = new Map();  // plano -> métricas do filtro atual
+let PLANTA_DRAG = null;
+let PLANTA_HOVER = null;
 
 const pct2 = (n) => n == null || !isFinite(n) ? "—" : fmtNum(n, 2) + "%";
 
@@ -56,6 +80,7 @@ function buildPlanejado(table) {
   if ([iPlano, iY, iX, iZ].some((i) => i === undefined)) {
     throw new Error("A aba PLANEJADO precisa das colunas PLANO, Y, X e Z.");
   }
+  const iD = idx["DIAMETRO"]; // opcional
   const plans = new Map();
   let ignored = 0;
   table.rows.forEach((row) => {
@@ -66,8 +91,9 @@ function buildPlanejado(table) {
     const y = toNumber(cell(iY));
     const z = toNumber(cell(iZ));
     if (!isFinite(x) || !isFinite(y) || !isFinite(z)) { ignored++; return; }
+    const d = iD === undefined ? NaN : toNumber(cell(iD));
     if (!plans.has(plano)) plans.set(plano, []);
-    plans.get(plano).push({ x, y, z });
+    plans.get(plano).push({ x, y, z, d: isFinite(d) ? d : null });
   });
   return { plans, ignored };
 }
@@ -142,15 +168,20 @@ function plantaVisibleIds(plano, tf) {
     .map((r) => String(Number(r.id))));
 }
 
+/* Limite XY do furo, em metros: 2 × diâmetro projetado (pol) convertido para metros. */
+function tolXY(p) {
+  return p && p.d != null ? PLANTA_DISP_FATOR * p.d * POL_EM_M : COLLAR_TOL_XY;
+}
+
 function plantaStatus(m) {
-  if (m.dxy > COLLAR_TOL_XY) return "red";
+  if (m.dxy > tolXY(m.p)) return "red";
   if (Math.abs(m.dz) > COLLAR_TOL_Z) return "amber";
   return "ok";
 }
 
 function plantaMetrics(matches) {
   const n = matches.length;
-  const xy = matches.filter((m) => m.dxy <= COLLAR_TOL_XY).length;
+  const xy = matches.filter((m) => m.dxy <= tolXY(m.p)).length;
   const z = matches.filter((m) => Math.abs(m.dz) <= COLLAR_TOL_Z).length;
   return {
     n,
@@ -161,95 +192,259 @@ function plantaMetrics(matches) {
   };
 }
 
-/* ---------- Mapa de planta de um plano ---------- */
-function plantaSvg(p) {
-  const NS = "http://www.w3.org/2000/svg";
-  const W = 600, H = 380, PAD = 28;
-  const svg = document.createElementNS(NS, "svg");
-  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-  svg.setAttribute("class", "planta-svg");
-  svg.setAttribute("role", "img");
-  svg.setAttribute("aria-label", `Planta do plano ${p.plano}: collar previsto e realizado`);
-
-  const pts = [];
-  p.matches.forEach((m) => { pts.push(m.p, m.r); });
-  p.unmatchedR.forEach((r) => pts.push(r));
-  p.unmatchedP.forEach((q) => pts.push(q));
-  if (!pts.length) {
-    const t = document.createElementNS(NS, "text");
-    t.setAttribute("x", W / 2); t.setAttribute("y", H / 2);
-    t.setAttribute("text-anchor", "middle");
-    t.setAttribute("class", "planta-svg__empty");
-    t.textContent = "Sem furos no filtro atual";
-    svg.appendChild(t);
-    return svg;
-  }
-
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  pts.forEach((q) => {
-    if (q.x < minX) minX = q.x; if (q.x > maxX) maxX = q.x;
-    if (q.y < minY) minY = q.y; if (q.y > maxY) maxY = q.y;
-  });
-  const rangeX = Math.max(maxX - minX, 1);
-  const rangeY = Math.max(maxY - minY, 1);
-  const scale = Math.min((W - PAD * 2) / rangeX, (H - PAD * 2) / rangeY);
-  const offX = (W - rangeX * scale) / 2;
-  const offY = (H - rangeY * scale) / 2;
-  const tx = (x) => offX + (x - minX) * scale;
-  const ty = (y) => H - (offY + (y - minY) * scale); // norte para cima
-
-  const el = (name, attrs, parent) => {
-    const node = document.createElementNS(NS, name);
-    Object.entries(attrs).forEach(([k, v]) => node.setAttribute(k, v));
-    if (parent) parent.appendChild(node);
-    return node;
-  };
-
-  const links = el("g", { class: "planta-links" }, svg);
-  p.matches.forEach((m) => {
-    el("line", { x1: tx(m.p.x), y1: ty(m.p.y), x2: tx(m.r.x), y2: ty(m.r.y), stroke: PLANTA_COLORS.link, "stroke-width": 1 }, links);
-  });
-
-  const plannedG = el("g", { class: "planta-planned" }, svg);
-  p.matches.forEach((m) => {
-    el("circle", { cx: tx(m.p.x), cy: ty(m.p.y), r: 3.4, fill: "none", stroke: PLANTA_COLORS.planned, "stroke-width": 1.1 }, plannedG);
-  });
-  p.unmatchedP.forEach((q) => {
-    const c = el("circle", { cx: tx(q.x), cy: ty(q.y), r: 3.4, fill: "none", stroke: PLANTA_COLORS.planned, "stroke-width": 1.1, "stroke-dasharray": "2 2" }, plannedG);
-    const title = document.createElementNS(NS, "title");
-    title.textContent = `${p.plano} · previsto sem furo realizado · X ${fmtNum(q.x, 2)} · Y ${fmtNum(q.y, 2)} · Z ${fmtNum(q.z, 2)}`;
-    c.appendChild(title);
-  });
-
-  const realG = el("g", { class: "planta-real" }, svg);
-  p.matches.forEach((m) => {
-    const c = el("circle", { cx: tx(m.r.x), cy: ty(m.r.y), r: 3.6, fill: PLANTA_COLORS[plantaStatus(m)], stroke: "#ffffff", "stroke-width": 0.6 }, realG);
-    const title = document.createElementNS(NS, "title");
-    title.textContent = `${p.plano} · furo ${m.r.id || "s/ ID"} · ΔXY ${fmtNum(m.dxy, 2)} m · ΔZ ${fmtNum(m.dz, 2)} m`;
-    c.appendChild(title);
-  });
-  p.unmatchedR.forEach((r) => {
-    const c = el("circle", { cx: tx(r.x), cy: ty(r.y), r: 3.6, fill: PLANTA_COLORS.blue, stroke: "#ffffff", "stroke-width": 0.6 }, realG);
-    const title = document.createElementNS(NS, "title");
-    title.textContent = `${p.plano} · furo ${r.id || "s/ ID"} · sem collar previsto correspondente`;
-    c.appendChild(title);
-  });
-  return svg;
+/* ---------- Mapa 2D único: zoom, arrastar e tooltip ---------- */
+function plantaEl(name, attrs, parent) {
+  const node = document.createElementNS(PLANTA_NS, name);
+  Object.entries(attrs).forEach(([k, v]) => node.setAttribute(k, v));
+  if (parent) parent.appendChild(node);
+  return node;
 }
 
-function plantaCardEl(p, m) {
-  const card = document.createElement("article");
-  card.className = "planta-card";
-  const head = document.createElement("header");
-  head.className = "planta-card__head";
-  const title = document.createElement("strong");
-  title.textContent = p.plano;
-  const meta = document.createElement("span");
-  meta.className = "planta-card__meta";
-  meta.textContent = `${fmtInt(m.n)} furos · XY ${pct2(m.xyPct)} · Z ${pct2(m.zPct)}`;
-  head.append(title, meta);
-  card.append(head, plantaSvg(p));
-  return card;
+function plantaScale() {
+  const r = PLANTA_SVG.getBoundingClientRect();
+  return Math.min(r.width / PLANTA_VIEW.w, r.height / PLANTA_VIEW.h) || 1;
+}
+
+function applyPlantaView() {
+  PLANTA_SVG.setAttribute("viewBox", `${PLANTA_VIEW.x} ${PLANTA_VIEW.y} ${PLANTA_VIEW.w} ${PLANTA_VIEW.h}`);
+  const s = plantaScale();
+  PLANTA_SIZED.forEach(({ el, px }) => el.setAttribute("r", (px / s).toFixed(4)));
+}
+
+function fitPlantaView() {
+  const w = Math.max(PLANTA_BOUNDS.w, 1);
+  const h = Math.max(PLANTA_BOUNDS.h, 1);
+  const pad = Math.max(w, h) * 0.04;
+  PLANTA_VIEW = { x: -pad, y: -pad, w: w + pad * 2, h: h + pad * 2 };
+}
+
+function resetPlantaView() {
+  if (!PLANTA_VIEW || !PLANTA_BOUNDS) return;
+  fitPlantaView();
+  applyPlantaView();
+}
+
+function zoomPlanta(factor, clientX, clientY) {
+  if (!PLANTA_VIEW || !PLANTA_SVG) return;
+  let ax = PLANTA_VIEW.x + PLANTA_VIEW.w / 2;
+  let ay = PLANTA_VIEW.y + PLANTA_VIEW.h / 2;
+  if (clientX != null) {
+    const p = PLANTA_SVG.createSVGPoint();
+    p.x = clientX;
+    p.y = clientY;
+    const loc = p.matrixTransform(PLANTA_SVG.getScreenCTM().inverse());
+    ax = loc.x;
+    ay = loc.y;
+  }
+  const full = Math.max(PLANTA_BOUNDS.w, PLANTA_BOUNDS.h, 1);
+  const nw = Math.min(Math.max(PLANTA_VIEW.w * factor, 0.5), full * 8);
+  const k = nw / PLANTA_VIEW.w;
+  PLANTA_VIEW.x = ax - (ax - PLANTA_VIEW.x) * k;
+  PLANTA_VIEW.y = ay - (ay - PLANTA_VIEW.y) * k;
+  PLANTA_VIEW.w = nw;
+  PLANTA_VIEW.h *= k;
+  applyPlantaView();
+}
+
+function onPlantaWheel(e) {
+  e.preventDefault();
+  hidePlantaTooltip();
+  zoomPlanta(e.deltaY < 0 ? 0.85 : 1 / 0.85, e.clientX, e.clientY);
+}
+
+function onPlantaDown(e) {
+  if (e.button !== 0 && e.button !== 1) return;
+  PLANTA_DRAG = { x: e.clientX, y: e.clientY, vx: PLANTA_VIEW.x, vy: PLANTA_VIEW.y };
+  try { PLANTA_SVG.setPointerCapture(e.pointerId); } catch (_) { /* ponteiro já liberado */ }
+  PLANTA_SVG.classList.add("is-dragging");
+  hidePlantaTooltip();
+}
+
+function onPlantaMove(e) {
+  if (PLANTA_DRAG) {
+    const s = plantaScale();
+    PLANTA_VIEW.x = PLANTA_DRAG.vx - (e.clientX - PLANTA_DRAG.x) / s;
+    PLANTA_VIEW.y = PLANTA_DRAG.vy - (e.clientY - PLANTA_DRAG.y) / s;
+    applyPlantaView();
+    return;
+  }
+  showPlantaTooltip(e);
+}
+
+function onPlantaUp(e) {
+  if (!PLANTA_DRAG) return;
+  try { PLANTA_SVG.releasePointerCapture?.(e.pointerId); } catch (_) { /* ponteiro já liberado */ }
+  PLANTA_SVG.classList.remove("is-dragging");
+  PLANTA_DRAG = null;
+}
+
+function setupPlantaMap() {
+  if (PLANTA_SVG) return;
+  const svg = document.getElementById("planta-map");
+  if (!svg) return;
+  PLANTA_SVG = svg;
+  PLANTA_CONTENT = plantaEl("g", { class: "planta-content" }, svg);
+  svg.addEventListener("wheel", onPlantaWheel, { passive: false });
+  svg.addEventListener("pointerdown", onPlantaDown);
+  svg.addEventListener("pointermove", onPlantaMove);
+  svg.addEventListener("pointerup", onPlantaUp);
+  svg.addEventListener("pointercancel", onPlantaUp);
+  svg.addEventListener("pointerleave", hidePlantaTooltip);
+  svg.addEventListener("dblclick", resetPlantaView);
+  document.getElementById("planta-zoom-in")?.addEventListener("click", () => zoomPlanta(0.8));
+  document.getElementById("planta-zoom-out")?.addEventListener("click", () => zoomPlanta(1.25));
+  document.getElementById("planta-zoom-reset")?.addEventListener("click", resetPlantaView);
+}
+
+function clearPlantaHover() {
+  if (!PLANTA_HOVER) return;
+  PLANTA_HOVER.forEach((node) => node.classList.remove("is-hover"));
+  PLANTA_HOVER = null;
+}
+
+function hidePlantaTooltip() {
+  clearPlantaHover();
+  const tip = document.getElementById("planta-tooltip");
+  if (tip) tip.hidden = true;
+}
+
+function plantaStatusText(item) {
+  if (item.kind === "planned") return "Previsto sem furo realizado";
+  if (item.kind === "realized") return "Realizado sem previsto correspondente (fora do cálculo)";
+  return PLANTA_STATUS_LABEL[plantaStatus(item)];
+}
+
+function buildPlantaTooltip(tip, item) {
+  const head = document.createElement("strong");
+  head.className = "planta-tooltip__title";
+  const rows = [];
+  const add = (label, value) => rows.push([label, value]);
+  const xyz = (p) => `X ${fmtNum(p.x, 2)} · Y ${fmtNum(p.y, 2)} · Z ${fmtNum(p.z, 2)}`;
+  const plan = PLANTA_PLANS.get(item.plano);
+  if (item.kind === "planned") {
+    head.textContent = `${item.plano} · previsto sem furo realizado`;
+    add("Status", plantaStatusText(item));
+    add("Previsto", xyz(item.p));
+    add("Diâmetro", item.p.d != null ? fmtNum(item.p.d, 0) : "não informado");
+  } else if (item.kind === "realized") {
+    head.textContent = `${item.plano} · furo ${item.id || "s/ ID"}`;
+    add("Status", plantaStatusText(item));
+    add("Realizado", xyz(item.r));
+  } else {
+    head.textContent = `${item.plano} · furo ${item.id || "s/ ID"}`;
+    add("Status", plantaStatusText(item));
+    add("Previsto", xyz(item.p));
+    add("Realizado", xyz(item.r));
+    const lim = tolXY(item.p);
+    add("Δ XY", `${fmtNum(item.dxy, 3)} m (limite ${fmtNum(lim, 3)} m)`);
+    add("Δ Z", `${item.dz >= 0 ? "+" : ""}${fmtNum(item.dz, 2)} m (limite ±${fmtNum(COLLAR_TOL_Z, 2)} m)`);
+    add("Diâmetro", item.p.d != null ? `${fmtNum(item.p.d, 0)} pol` : "não informado (limite XY padrão)");
+  }
+  if (plan && plan.n) {
+    add("Aderência do plano", `XY ${pct2(plan.xyPct)} · Z ${pct2(plan.zPct)} · ${fmtInt(plan.n)} furos`);
+  }
+  const dl = document.createElement("dl");
+  dl.className = "planta-tooltip__list";
+  rows.forEach(([label, value]) => {
+    const dt = document.createElement("dt");
+    dt.textContent = label;
+    const dd = document.createElement("dd");
+    dd.textContent = value;
+    dl.append(dt, dd);
+  });
+  tip.replaceChildren(head, dl);
+}
+
+function showPlantaTooltip(e) {
+  const tip = document.getElementById("planta-tooltip");
+  const node = e.target.closest?.("[data-idx]");
+  if (!tip || !node || !PLANTA_SVG.contains(node)) { hidePlantaTooltip(); return; }
+  const idx = Number(node.dataset.idx);
+  const item = PLANTA_ITEMS[idx];
+  if (!item) { hidePlantaTooltip(); return; }
+  if (!PLANTA_HOVER || !PLANTA_HOVER.includes(node)) {
+    clearPlantaHover();
+    PLANTA_HOVER = [...PLANTA_CONTENT.querySelectorAll(`[data-idx="${idx}"]`)];
+    PLANTA_HOVER.forEach((n) => n.classList.add("is-hover"));
+  }
+  buildPlantaTooltip(tip, item);
+  tip.hidden = false;
+  const box = PLANTA_SVG.parentElement.getBoundingClientRect();
+  const tw = tip.offsetWidth;
+  const th = tip.offsetHeight;
+  let left = e.clientX - box.left + 16;
+  let top = e.clientY - box.top + 16;
+  if (left + tw > box.width) left = e.clientX - box.left - tw - 16;
+  if (top + th > box.height) top = e.clientY - box.top - th - 16;
+  tip.style.left = `${Math.max(0, left)}px`;
+  tip.style.top = `${Math.max(0, top)}px`;
+}
+
+function renderPlantaMap(items, key) {
+  setupPlantaMap();
+  if (!PLANTA_SVG) return;
+  PLANTA_CONTENT.replaceChildren();
+  PLANTA_SIZED = [];
+  PLANTA_ITEMS = items;
+  hidePlantaTooltip();
+
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  const pushPt = (q) => {
+    if (q.x < minX) minX = q.x; if (q.x > maxX) maxX = q.x;
+    if (q.y < minY) minY = q.y; if (q.y > maxY) maxY = q.y;
+  };
+  items.forEach((it) => {
+    if (it.p) pushPt(it.p);
+    if (it.r) pushPt(it.r);
+  });
+  if (!items.length) {
+    PLANTA_VIEW = null;
+    PLANTA_KEY = "";
+    return;
+  }
+  PLANTA_ORIGIN = { x: minX, y: maxY };
+  PLANTA_BOUNDS = { w: maxX - minX, h: maxY - minY };
+  if (key !== PLANTA_KEY || !PLANTA_VIEW) {
+    PLANTA_KEY = key;
+    fitPlantaView();
+  }
+  const lx = (q) => q.x - PLANTA_ORIGIN.x;
+  const ly = (q) => PLANTA_ORIGIN.y - q.y;
+
+  const links = plantaEl("g", { class: "planta-links" }, PLANTA_CONTENT);
+  const planned = plantaEl("g", { class: "planta-planned" }, PLANTA_CONTENT);
+  const real = plantaEl("g", { class: "planta-real" }, PLANTA_CONTENT);
+  const ring = (q, idx, dashed) => {
+    const el = plantaEl("circle", {
+      cx: lx(q), cy: ly(q), r: 1,
+      class: "planta-ring" + (dashed ? " planta-ring--dashed" : ""),
+      "data-idx": idx,
+    }, planned);
+    PLANTA_SIZED.push({ el, px: 4.2 });
+  };
+  const dot = (q, color, idx) => {
+    const el = plantaEl("circle", {
+      cx: lx(q), cy: ly(q), r: 1, fill: color,
+      class: "planta-dot", "data-idx": idx,
+    }, real);
+    PLANTA_SIZED.push({ el, px: 3.4 });
+  };
+
+  items.forEach((it, idx) => {
+    if (it.kind === "match") {
+      plantaEl("line", {
+        x1: lx(it.p), y1: ly(it.p), x2: lx(it.r), y2: ly(it.r),
+        stroke: PLANTA_COLORS.link, class: "planta-link",
+      }, links);
+      ring(it.p, idx, false);
+      dot(it.r, PLANTA_COLORS[plantaStatus(it)], idx);
+    } else if (it.kind === "planned") {
+      ring(it.p, idx, true);
+    } else {
+      dot(it.r, PLANTA_COLORS.blue, idx);
+    }
+  });
+  applyPlantaView();
 }
 
 /* ---------- Gráficos de aderência XY e Z ---------- */
@@ -360,22 +555,26 @@ function setPlantaStatus(text) {
 
 /* ---------- Desenho do bloco ---------- */
 async function drawPlanta() {
-  const grid = document.getElementById("planta-grid");
   const charts = document.getElementById("planta-charts");
   const subtitle = document.getElementById("planta-subtitle");
-  if (!grid) return;
   const token = ++PLANTA_TOKEN;
 
   if (subtitle) {
-    subtitle.textContent = `Tolerância XY ±${fmtNum(COLLAR_TOL_XY, 2)} m · Z ±${fmtNum(COLLAR_TOL_Z, 2)} m · cada collar previsto é pareado ao realizado mais próximo (até ${fmtNum(COLLAR_MATCH_MAX, 1)} m).`;
+    subtitle.textContent = `Todos os planos do filtro em uma só planta · deslocamento XY até 2 × diâmetro projetado do furo · Z ±${fmtNum(COLLAR_TOL_Z, 2)} m · cada collar previsto é pareado ao realizado mais próximo (até ${fmtNum(COLLAR_MATCH_MAX, 1)} m).`;
   }
-  grid.innerHTML = "";
   if (charts) charts.hidden = true;
+  setupPlantaMap();
+
+  const clearAll = () => {
+    PLANTA_PLANS = new Map();
+    renderPlantaMap([], "");
+    destroy("plantaXY");
+    destroy("plantaZ");
+  };
 
   if (!PLANEJADO) {
     setPlantaStatus(PLANEJADO_ERROR || "Carregando coordenadas previstas…");
-    destroy("plantaXY");
-    destroy("plantaZ");
+    clearAll();
     return;
   }
 
@@ -393,8 +592,7 @@ async function drawPlanta() {
 
   if (!candidatos.length) {
     setPlantaStatus("Nenhum plano com coordenadas previstas no filtro atual.");
-    destroy("plantaXY");
-    destroy("plantaZ");
+    clearAll();
     return;
   }
   setPlantaStatus("Carregando geometria dos planos…");
@@ -429,23 +627,35 @@ async function drawPlanta() {
     setPlantaStatus(semDxf.length
       ? `Sem DXF disponível para: ${semDxf.join(", ")}.`
       : "Nenhum plano com geometria disponível.");
-    destroy("plantaXY");
-    destroy("plantaZ");
+    clearAll();
     return;
   }
 
-  const rows = planos.map((p) => ({ p, m: plantaMetrics(p.matches) }));
-  rows.forEach(({ p, m }) => grid.appendChild(plantaCardEl(p, m)));
+  // Itens do mapa: cada collar previsto/realizado com o plano e a métrica
+  const items = [];
+  PLANTA_PLANS = new Map();
+  planos.forEach((p) => {
+    PLANTA_PLANS.set(p.plano, plantaMetrics(p.matches));
+    p.matches.forEach((m) => items.push({
+      kind: "match", plano: p.plano, id: m.r.id, p: m.p, r: m.r, dxy: m.dxy, dz: m.dz,
+    }));
+    p.unmatchedR.forEach((r) => items.push({ kind: "realized", plano: p.plano, id: r.id, r }));
+    p.unmatchedP.forEach((q) => items.push({ kind: "planned", plano: p.plano, p: q }));
+  });
 
+  const key = [selected, tf.y, tf.mo, planos.map((p) => p.plano).join(",")].join("|");
+  renderPlantaMap(items, key);
+
+  const rows = planos.map((p) => ({ plano: p.plano, ...PLANTA_PLANS.get(p.plano) }));
   const all = plantaMetrics(planos.flatMap((p) => p.matches));
-  const labels = [...rows.map(({ p }) => p.plano), "TOTAL"];
-  const furos = [...rows.map(({ m }) => m.n), all.n];
+  const labels = [...rows.map((r) => r.plano), "TOTAL"];
+  const furos = [...rows.map((r) => r.n), all.n];
   destroy("plantaXY");
   destroy("plantaZ");
   CHARTS.plantaXY = new Chart(document.getElementById("planta-chart-xy"),
-    plantaChartConfig(labels, [...rows.map(({ m }) => m.xyPct), all.xyPct], furos));
+    plantaChartConfig(labels, [...rows.map((r) => r.xyPct), all.xyPct], furos));
   CHARTS.plantaZ = new Chart(document.getElementById("planta-chart-z"),
-    plantaChartConfig(labels, [...rows.map(({ m }) => m.zPct), all.zPct], furos));
+    plantaChartConfig(labels, [...rows.map((r) => r.zPct), all.zPct], furos));
   if (charts) charts.hidden = false;
 
   const partes = [];

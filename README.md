@@ -81,8 +81,10 @@ O bloco "Aderência em planta" compara, em cada plano, o collar previsto com o c
 - **Realizado:** ponto do layer `Hole` de cada DXF do plano (mesma fonte do mapa).
 - **Pareamento:** cada collar previsto é ligado ao realizado mais próximo em planta, um para
   um, até 2,0 m (`COLLAR_MATCH_MAX` em `planta.js`).
-- **Tolerâncias:** XY (distância em planta) ≤ 0,50 m e |Z realizado − Z previsto| ≤ 0,50 m
-  (`COLLAR_TOL_XY` e `COLLAR_TOL_Z` em `planta.js`).
+- **Tolerâncias:** deslocamento XY (distância em planta) ≤ 2 × diâmetro projetado do furo,
+  com o diâmetro da coluna `DIAMETRO` em polegadas (4 pol = 0,2032 m de limite; 5 pol = 0,254 m).
+  Furos sem diâmetro usam 0,50 m (`COLLAR_TOL_XY`). Z: |Z realizado − Z previsto| ≤ 0,50 m
+  (`COLLAR_TOL_Z`). Constantes em `planta.js`.
 - **Cores:** verde, dentro nos dois eixos; âmbar, fora só em Z; vermelho, fora em XY; azul,
   realizado sem previsto correspondente (não entra no cálculo); anel tracejado, previsto sem
   furo realizado.

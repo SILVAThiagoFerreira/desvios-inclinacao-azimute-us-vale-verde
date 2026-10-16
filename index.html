@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="./assets/enaex-favicon.png">
   <meta name="description" content="Análise de desvios de inclinação, azimute e profundidade dos furos de perfuração — US Vale Verde.">
   <link rel="preconnect" href="https://docs.google.com">
-  <link rel="stylesheet" href="./styles.css?v=18">
+  <link rel="stylesheet" href="./styles.css?v=19">
 </head>
 <body>
   <header class="topbar">
@@ -171,7 +171,16 @@
             <span class="planta-legend__item"><span class="planta-legend__link"></span>Ligação previsto × realizado</span>
           </div>
           <p id="planta-status" class="map-status" aria-live="polite"></p>
-          <div id="planta-grid" class="planta-grid"></div>
+          <div class="planta-map-wrap">
+            <div class="planta-map-tools" role="group" aria-label="Controles do mapa de planta">
+              <button id="planta-zoom-in" type="button" class="filter-reset" aria-label="Aproximar">+</button>
+              <button id="planta-zoom-out" type="button" class="filter-reset" aria-label="Afastar">−</button>
+              <button id="planta-zoom-reset" type="button" class="filter-reset">Redefinir vista</button>
+              <span class="planta-map-tools__hint">Roda do mouse: zoom · arraste: mover · duplo clique: redefinir · passe o mouse sobre um furo para ver os detalhes</span>
+            </div>
+            <svg id="planta-map" class="planta-map" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Planta de todos os planos: collar previsto e realizado"></svg>
+            <div id="planta-tooltip" class="planta-tooltip" hidden></div>
+          </div>
         </div>
       </div>
 
@@ -328,7 +337,7 @@
     }
   </script>
   <script type="module" src="./map3d.js?v=12"></script>
-  <script src="./planta.js?v=1"></script>
+  <script src="./planta.js?v=2"></script>
   <script src="./app.js?v=21"></script>
   <script src="./excel-export-v2.js?v=5"></script>
 </body>

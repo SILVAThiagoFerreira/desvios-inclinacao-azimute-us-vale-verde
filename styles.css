@@ -869,29 +869,71 @@ body {
   width: 18px;
   border-top: 1px solid #b9c0c6;
 }
-.planta-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr));
-  gap: 16px;
+.planta-map-wrap { position: relative; }
+.planta-map-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
 }
-.planta-card {
-  overflow: hidden;
+.planta-map-tools__hint { font-size: 11px; color: var(--muted); }
+.planta-map {
+  display: block;
+  width: 100%;
+  height: clamp(440px, 56vw, 680px);
+  background: #fbfbfc;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.planta-map.is-dragging { cursor: grabbing; }
+.planta-ring {
+  fill: none;
+  stroke: #7b858d;
+  stroke-width: 1.1px;
+  vector-effect: non-scaling-stroke;
+}
+.planta-ring--dashed { stroke-dasharray: 3 3; }
+.planta-link { vector-effect: non-scaling-stroke; stroke-width: 1px; }
+.planta-dot {
+  stroke: #ffffff;
+  stroke-width: 0.6px;
+  vector-effect: non-scaling-stroke;
+}
+.planta-ring.is-hover,
+.planta-dot.is-hover {
+  stroke: #111111;
+  stroke-width: 2px;
+}
+.planta-tooltip {
+  position: absolute;
+  z-index: 5;
+  max-width: 340px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink);
   background: var(--surface);
   border: 1px solid var(--rule);
   border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  pointer-events: none;
 }
-.planta-card__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-  padding: 10px 14px;
-  background: #1f5b3a;
-  color: #ffffff;
+.planta-tooltip[hidden] { display: none; }
+.planta-tooltip__title {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
 }
-.planta-card__head strong { font-size: 15px; font-weight: 700; letter-spacing: 0.04em; }
-.planta-card__meta { font-size: 11.5px; opacity: 0.92; }
-.planta-svg { display: block; width: 100%; height: auto; background: #fbfbfc; }
-.planta-svg__empty { font-size: 13px; fill: var(--muted); }
+.planta-tooltip__list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 12px;
+  margin: 0;
+}
+.planta-tooltip__list dt { color: var(--muted); }
+.planta-tooltip__list dd { margin: 0; }
 .planta-charts[hidden] { display: none; }
