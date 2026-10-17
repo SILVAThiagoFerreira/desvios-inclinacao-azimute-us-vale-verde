@@ -24,8 +24,9 @@ const PLANTA_DISP_FATOR = 2;
 const MM_EM_M = 0.001;
 // Fallback para furos sem diâmetro na planilha (metros)
 const COLLAR_TOL_XY = 0.5;
-// Tolerância Z do collar (metros)
-const COLLAR_TOL_Z = 0.5;
+// Tolerância Z do collar (metros): o mesmo limite de profundidade do site (LIMITS.depth,
+// vindo de data/parametros.json ou da tabela de parâmetros), ±0,20 m por padrão.
+const plantaTolZ = () => LIMITS.depth;
 // Distância máxima para parear um collar previsto a um realizado (metros).
 const COLLAR_MATCH_MAX = 2.0;
 
@@ -170,14 +171,14 @@ function tolXY(p) {
 
 /* Situação de um furo pareado no eixo pedido: "ok" dentro da tolerância, "red" fora. */
 function plantaStatusFor(m, mode) {
-  if (mode === "z") return Math.abs(m.dz) <= COLLAR_TOL_Z ? "ok" : "red";
+  if (mode === "z") return Math.abs(m.dz) <= plantaTolZ() ? "ok" : "red";
   return m.dxy <= tolXY(m.p) ? "ok" : "red";
 }
 
 function plantaMetrics(matches) {
   const n = matches.length;
   const xy = matches.filter((m) => m.dxy <= tolXY(m.p)).length;
-  const z = matches.filter((m) => Math.abs(m.dz) <= COLLAR_TOL_Z).length;
+  const z = matches.filter((m) => Math.abs(m.dz) <= plantaTolZ()).length;
   return {
     n,
     xy,
@@ -426,7 +427,7 @@ function buildPlantaTooltip(tip, item, mode) {
     add("Realizado", xyz(item.r));
     const lim = tolXY(item.p);
     add("Δ XY", `${fmtNum(item.dxy, 3)} m (limite ${fmtNum(lim, 3)} m)`);
-    add("Δ Z", `${item.dz >= 0 ? "+" : ""}${fmtNum(item.dz, 2)} m (limite ±${fmtNum(COLLAR_TOL_Z, 2)} m)`);
+    add("Δ Z", `${item.dz >= 0 ? "+" : ""}${fmtNum(item.dz, 2)} m (limite ±${fmtNum(plantaTolZ(), 2)} m)`);
     add("Diâmetro", item.p.d != null ? `${fmtDiam(item.p.d)} mm` : "não informado (limite XY padrão)");
   }
   if (plan && plan.n) {
@@ -662,7 +663,7 @@ function renderPlanDialog() {
   if (titulo) titulo.textContent = `${PLANTA_MODE_TITLE[PLANTA_DIALOG_MODE]} · todos os planos`;
   const sub = document.getElementById("planta-dialog-sub");
   if (sub) sub.textContent = PLANTA_DIALOG_MODE === "z"
-    ? "Cada furo colorido pela diferença de cota (realizado − previsto): verde dentro de ±0,50 m, vermelho fora. Mesmo filtro da página. Role a janela para ver todos os planos. Em cada plano: Ctrl + roda do mouse para zoom, arraste para mover, duplo clique para redefinir."
+    ? `Cada furo colorido pela diferença de cota (realizado − previsto): verde dentro de ±${fmtNum(plantaTolZ(), 2)} m, vermelho fora. Mesmo filtro da página. Role a janela para ver todos os planos. Em cada plano: Ctrl + roda do mouse para zoom, arraste para mover, duplo clique para redefinir.`
     : "Cada furo colorido pela distância em planta entre o collar previsto e o realizado: verde dentro de 2 × diâmetro projetado, vermelho fora. Mesmo filtro da página. Role a janela para ver todos os planos. Em cada plano: Ctrl + roda do mouse para zoom, arraste para mover, duplo clique para redefinir.";
   PLANTA_CARDS = [];
   destroy("plantaDlgXY");
@@ -863,8 +864,10 @@ async function drawPlanta() {
   const subtitle = document.getElementById("planta-subtitle");
   const token = ++PLANTA_TOKEN;
 
+  const zLimite = document.getElementById("planta-z-limite");
+  if (zLimite) zLimite.textContent = `±${fmtNum(plantaTolZ(), 2)} m`;
   if (subtitle) {
-    subtitle.textContent = `Dois mapas em planta do mesmo filtro: XY (deslocamento de até 2 × diâmetro projetado do furo) e Z (±${fmtNum(COLLAR_TOL_Z, 2)} m) · cada collar previsto é pareado ao realizado mais próximo (até ${fmtNum(COLLAR_MATCH_MAX, 1)} m).`;
+    subtitle.textContent = `Dois mapas em planta do mesmo filtro: XY (deslocamento de até 2 × diâmetro projetado do furo) e Z (±${fmtNum(plantaTolZ(), 2)} m) · cada collar previsto é pareado ao realizado mais próximo (até ${fmtNum(COLLAR_MATCH_MAX, 1)} m).`;
   }
   setupPlantaMap();
 

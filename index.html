@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="./assets/enaex-favicon.png">
   <meta name="description" content="Análise de desvios de inclinação, azimute e profundidade dos furos de perfuração — US Vale Verde.">
   <link rel="preconnect" href="https://docs.google.com">
-  <link rel="stylesheet" href="./styles.css?v=26">
+  <link rel="stylesheet" href="./styles.css?v=28">
 </head>
 <body>
   <header class="topbar">
@@ -22,7 +22,10 @@
         <p class="eyebrow">ANÁLISE DE DESVIOS · INCLINAÇÃO · AZIMUTE · PROFUNDIDADE · ADERÊNCIA À POSIÇÃO DO COLLAR</p>
         <h1>Aderência da Perfuração ao Projeto</h1>
       </div>
-      <button id="export-xlsx" type="button" class="filter-reset" title="Exportar dados filtrados para Excel">⤓ Excel</button>
+      <div class="page-head__actions">
+        <button id="relatorio-open" type="button" class="relatorio-open-btn" disabled title="Escolha um plano e exporte todos os seus desvios em PDF ou imagem">Relatório por plano</button>
+        <button id="export-xlsx" type="button" class="filter-reset" title="Exportar dados filtrados para Excel">⤓ Excel</button>
+      </div>
     </section>
 
     <section class="filter-panel" aria-label="Filtros">
@@ -193,7 +196,7 @@
               <div class="planta-map-block__head">
                 <div>
                   <h3 id="planta-z-title">Planta Z</h3>
-                  <p class="planta-map-block__sub">Diferença de cota entre o collar realizado e o previsto (limite: ±0,50 m)</p>
+                  <p class="planta-map-block__sub">Diferença de cota entre o collar realizado e o previsto (limite: <span id="planta-z-limite">±0,20 m</span>)</p>
                 </div>
                 <button id="planta-open-z" type="button" class="planta-open-btn">Ver todos os planos</button>
               </div>
@@ -377,6 +380,37 @@
     <p id="planta-dialog-status" class="planta-dialog__status" aria-live="polite" hidden></p>
     <div id="planta-dialog-body" class="planta-dialog__body"></div>
   </dialog>
+  <dialog id="relatorio-dialog" class="relatorio-dialog" aria-labelledby="relatorio-title">
+    <div class="relatorio-dialog__head">
+      <div>
+        <p class="chart-block__eyebrow">DESVIOS POR PLANO</p>
+        <h2 id="relatorio-title">Relatório de desvios por plano</h2>
+        <p class="relatorio-dialog__sub">Escolha um plano para exportar todos os furos fora da tolerância (ângulo, azimute ou profundidade). Período: <strong id="relatorio-periodo">—</strong>. Para mudar o período, use os filtros Ano e Mês da página.</p>
+      </div>
+      <button id="relatorio-close" type="button" class="filter-reset">Fechar</button>
+    </div>
+    <div class="relatorio-dialog__body">
+      <section class="relatorio-plans" aria-labelledby="relatorio-plans-title">
+        <p id="relatorio-plans-title" class="relatorio-side__label">Planos</p>
+        <label class="relatorio-search" id="relatorio-search-wrap" hidden>
+          <span>Buscar plano</span>
+          <input id="relatorio-search" type="search" placeholder="Parte do nome do plano" autocomplete="off">
+        </label>
+        <ul id="relatorio-list" class="relatorio-list" aria-labelledby="relatorio-plans-title"></ul>
+        <p id="relatorio-empty" class="relatorio-empty" hidden></p>
+      </section>
+      <aside class="relatorio-side" aria-label="Exportação do relatório">
+        <div id="relatorio-summary" class="relatorio-summary" aria-live="polite"></div>
+        <fieldset class="relatorio-format">
+          <legend>Formato</legend>
+          <label><input type="radio" name="relatorio-format" value="pdf" checked> PDF (várias páginas)</label>
+          <label><input type="radio" name="relatorio-format" value="png"> Imagem PNG (página única)</label>
+        </fieldset>
+        <button id="relatorio-export" type="button" class="relatorio-export" disabled>Exportar PDF</button>
+        <p id="relatorio-status" class="relatorio-status" aria-live="polite" hidden></p>
+      </aside>
+    </div>
+  </dialog>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
@@ -390,7 +424,8 @@
   </script>
   <script type="module" src="./map3d.js?v=12"></script>
   <script src="./planta.js?v=10"></script>
-  <script src="./app.js?v=22"></script>
+  <script src="./relatorio-plano.js?v=2"></script>
+  <script src="./app.js?v=23"></script>
   <script src="./excel-export-v2.js?v=5"></script>
 </body>
 </html>

@@ -256,6 +256,7 @@ async function loadSheet() {
   }
   populateFilters();
   setupExport();
+  setupRelatorio();
   // Sem mensagem de sucesso no topo; a barra de status aparece só em carregamento ou erro
   setStatus("ok", "");
   await loadPlanejado();

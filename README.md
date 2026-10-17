@@ -91,10 +91,10 @@ O bloco "Aderência em planta" compara, em cada plano, o collar previsto com o c
 - **Tolerâncias:** deslocamento XY (distância em planta) ≤ 2 × diâmetro projetado do furo,
   com o diâmetro da coluna `DIAMETRO` em milímetros (101,6 mm = limite de 0,2032 m; 127 mm =
   limite de 0,254 m; 139,7 mm = limite de 0,2794 m).
-  Furos sem diâmetro usam 0,50 m (`COLLAR_TOL_XY`). Z: |Z realizado − Z previsto| ≤ 0,50 m
+  Furos sem diâmetro usam 0,50 m (`COLLAR_TOL_XY`). Z: |Z realizado − Z previsto| ≤ limite de profundidade do site (±0,20 m por padrão, `LIMITS.depth`)
   (`COLLAR_TOL_Z`). Constantes em `planta.js`.
 - **Dois mapas:** o bloco mostra dois mapas em planta do mesmo filtro, lado a lado (em tela estreita, um embaixo do outro): **Planta XY** (distância em planta) e **Planta Z** (diferença de cota). Cada um tem seu botão "Ver todos os planos".
-- **Cores (Planta XY):** verde, dentro da tolerância XY; vermelho, fora. **Cores (Planta Z):** verde, dentro de ±0,50 m; vermelho, fora. Nos dois, azul é realizado sem previsto correspondente (não entra no cálculo) e anel tracejado é previsto sem furo realizado.
+- **Cores (Planta XY):** verde, dentro da tolerância XY; vermelho, fora. **Cores (Planta Z):** verde, dentro de ±0,20 m (limite de profundidade); vermelho, fora. Nos dois, azul é realizado sem previsto correspondente (não entra no cálculo) e anel tracejado é previsto sem furo realizado.
 - O botão "Ver todos os planos" de cada mapa abre uma janela com um bloco de planta por plano do filtro, colorido pelo eixo daquele mapa. Role a janela para ver todos; em cada plano, Ctrl + roda do mouse dá zoom e o arraste move.
 - A janela "Ver todos os planos" tem os botões "Exportar PDF" e "Exportar imagem", que geram um documento do eixo da janela aberta (XY ou Z), com todos os planos do filtro e os gráficos XY e Z. Clicar fora da janela fecha. A barra de status só aparece em carregamento ou erro.
 - Os filtros de ANO, MÊS e PLANO valem para o bloco. Sem filtro de período, os previstos sem
