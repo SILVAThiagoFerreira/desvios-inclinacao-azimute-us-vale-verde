@@ -7,9 +7,11 @@
    Pareamento: para cada plano, cada collar previsto é ligado ao collar
    realizado mais próximo em planta (um para um, do menor para o maior
    desvio), até COLLAR_MATCH_MAX metros.
-   Mapa 2D único com todos os planos do filtro, com zoom, arrastar e
-   tooltip por furo. Depende de app.js (RECORDS, fetchDxfHoles, parseGviz,
-   norm, destroy, CHARTS, C, LIMITS, fmtNum, fmtInt).
+   Dois mapas em planta no bloco: XY (cor pelo desvio em planta) e Z (cor
+   pela diferença de cota). Cada um tem zoom, arraste, tooltip e um botão
+   que abre a janela com um bloco por plano, no mesmo eixo.
+   Depende de app.js (RECORDS, fetchDxfHoles, parseGviz, norm, destroy,
+   CHARTS, C, LIMITS, fmtNum, fmtInt).
    ===================================================================== */
 
 // Planilha "Planejado - Coordenadas Previstas dos Furos (XYZ)". Lê a primeira aba
@@ -31,18 +33,17 @@ const PLANTA_NS = "http://www.w3.org/2000/svg";
 const PLANTA_COLORS = {
   green: "#1f5b3a",   // cabeçalhos e barras de aderência
   gold: "#b8860b",    // linha de meta
-  ok: "#2e8b57",      // dentro da tolerância em XY e Z
-  amber: "#c47b00",   // XY dentro, Z fora
-  red: "#e20613",     // XY fora
+  ok: "#2e8b57",      // dentro da tolerância do eixo
+  red: "#e20613",     // fora da tolerância do eixo
   blue: "#2563a8",    // realizado sem previsto correspondente
   planned: "#7b858d", // collar previsto
   link: "#b9c0c6",    // linha entre previsto e realizado
 };
-const PLANTA_STATUS_LABEL = {
-  ok: "Dentro nos dois eixos",
-  amber: "Fora só em Z",
-  red: "Fora em XY",
+const PLANTA_MODE_LABEL = {
+  xy: { ok: "Dentro do XY", red: "Fora do XY" },
+  z: { ok: "Dentro do Z", red: "Fora do Z" },
 };
+const PLANTA_MODE_TITLE = { xy: "Planta XY", z: "Planta Z" };
 const PLANTA_LEGEND_ORDER = { "Aderência": 0, "Furos": 1, "Meta": 2 };
 
 let PLANEJADO = null;          // Map(plano -> [{ x, y, z, d }])
@@ -51,18 +52,12 @@ let PLANEJADO_ERROR = "";
 let PLANEJADO_SIGNATURE = "";
 let PLANTA_TOKEN = 0;
 
-// Estado do mapa 2D (coordenadas locais: x = X - OX, y = OY - Y, em metros)
-let PLANTA_SVG = null;
-let PLANTA_CONTENT = null;
-let PLANTA_VIEW = null;        // { x, y, w, h } da viewBox
-let PLANTA_BOUNDS = null;      // { w, h } extensão total dos dados
-let PLANTA_KEY = "";           // chave do filtro; muda → refaz o enquadramento
-let PLANTA_ORIGIN = { x: 0, y: 0 };
-let PLANTA_SIZED = [];         // [{ el, px }] círculos com raio em pixels
-let PLANTA_ITEMS = [];         // itens do mapa, indexados por data-idx
+let PLANTA_ITEMS = [];         // itens do filtro atual (usados pelos mapas e pela janela)
 let PLANTA_PLANS = new Map();  // plano -> métricas do filtro atual
-let PLANTA_DRAG = null;
-let PLANTA_HOVER = null;
+let PLANTA_CHART_DATA = null;  // dados dos gráficos XY e Z do último desenho
+let PLANTA_CARDS = [];         // cards da janela "Ver todos os planos" (para redimensionar)
+let PLANTA_MAPS = null;        // { xy: PlantaMap, z: PlantaMap }
+let PLANTA_DIALOG_MODE = "xy"; // eixo da janela aberta: "xy" ou "z"
 
 const pct2 = (n) => n == null || !isFinite(n) ? "—" : fmtNum(n, 2) + "%";
 const fmtDiam = (d) => new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 }).format(d);
@@ -173,10 +168,10 @@ function tolXY(p) {
   return p && p.d != null ? PLANTA_DISP_FATOR * p.d * MM_EM_M : COLLAR_TOL_XY;
 }
 
-function plantaStatus(m) {
-  if (m.dxy > tolXY(m.p)) return "red";
-  if (Math.abs(m.dz) > COLLAR_TOL_Z) return "amber";
-  return "ok";
+/* Situação de um furo pareado no eixo pedido: "ok" dentro da tolerância, "red" fora. */
+function plantaStatusFor(m, mode) {
+  if (mode === "z") return Math.abs(m.dz) <= COLLAR_TOL_Z ? "ok" : "red";
+  return m.dxy <= tolXY(m.p) ? "ok" : "red";
 }
 
 function plantaMetrics(matches) {
@@ -192,7 +187,6 @@ function plantaMetrics(matches) {
   };
 }
 
-/* ---------- Mapa 2D único: zoom, arrastar e tooltip ---------- */
 function plantaEl(name, attrs, parent) {
   const node = document.createElementNS(PLANTA_NS, name);
   Object.entries(attrs).forEach(([k, v]) => node.setAttribute(k, v));
@@ -200,107 +194,201 @@ function plantaEl(name, attrs, parent) {
   return node;
 }
 
-function plantaScale() {
-  const r = PLANTA_SVG.getBoundingClientRect();
-  return Math.min(r.width / PLANTA_VIEW.w, r.height / PLANTA_VIEW.h) || 1;
+/* Posiciona o tooltip ao lado do ponteiro, sem sair da área do mapa (também no celular) */
+function placePlantaTip(tip, wrap, e) {
+  const box = wrap.getBoundingClientRect();
+  const tw = tip.offsetWidth;
+  const th = tip.offsetHeight;
+  let left = e.clientX - box.left + 16;
+  let top = e.clientY - box.top + 16;
+  if (left + tw > box.width) left = e.clientX - box.left - tw - 16;
+  if (top + th > box.height) top = e.clientY - box.top - th - 16;
+  tip.style.left = `${Math.min(Math.max(0, left), Math.max(0, box.width - tw))}px`;
+  tip.style.top = `${Math.min(Math.max(0, top), Math.max(0, box.height - th))}px`;
 }
 
-function applyPlantaView() {
-  PLANTA_SVG.setAttribute("viewBox", `${PLANTA_VIEW.x} ${PLANTA_VIEW.y} ${PLANTA_VIEW.w} ${PLANTA_VIEW.h}`);
-  const s = plantaScale();
-  PLANTA_SIZED.forEach(({ el, px }) => el.setAttribute("r", (px / s).toFixed(4)));
-}
-
-function fitPlantaView() {
-  const w = Math.max(PLANTA_BOUNDS.w, 1);
-  const h = Math.max(PLANTA_BOUNDS.h, 1);
-  const pad = Math.max(w, h) * 0.04;
-  PLANTA_VIEW = { x: -pad, y: -pad, w: w + pad * 2, h: h + pad * 2 };
-}
-
-function resetPlantaView() {
-  if (!PLANTA_VIEW || !PLANTA_BOUNDS) return;
-  fitPlantaView();
-  applyPlantaView();
-}
-
-function zoomPlanta(factor, clientX, clientY) {
-  if (!PLANTA_VIEW || !PLANTA_SVG) return;
-  let ax = PLANTA_VIEW.x + PLANTA_VIEW.w / 2;
-  let ay = PLANTA_VIEW.y + PLANTA_VIEW.h / 2;
-  if (clientX != null) {
-    const p = PLANTA_SVG.createSVGPoint();
-    p.x = clientX;
-    p.y = clientY;
-    const loc = p.matrixTransform(PLANTA_SVG.getScreenCTM().inverse());
-    ax = loc.x;
-    ay = loc.y;
+/* ---------- Mapa em planta de um eixo: zoom, arraste e tooltip ---------- */
+class PlantaMap {
+  constructor(svg, tip, mode) {
+    this.svg = svg;
+    this.tip = tip;
+    this.mode = mode;
+    this.wrap = svg.parentElement;
+    this.content = plantaEl("g", { class: "planta-content" }, svg);
+    this.view = null;                 // { x, y, w, h } da viewBox, em metros locais
+    this.bounds = { w: 1, h: 1 };
+    this.key = "";                    // chave do filtro; muda → refaz o enquadramento
+    this.origin = { x: 0, y: 0 };
+    this.sized = [];                  // [{ el, px }] marcadores com raio em pixels
+    this.items = [];                  // itens indexados por data-idx
+    this.drag = null;
+    this.hover = null;
+    svg.addEventListener("wheel", (e) => this.onWheel(e), { passive: false });
+    svg.addEventListener("pointerdown", (e) => this.onDown(e));
+    svg.addEventListener("pointermove", (e) => this.onMove(e));
+    svg.addEventListener("pointerup", (e) => this.onUp(e));
+    svg.addEventListener("pointercancel", (e) => this.onUp(e));
+    svg.addEventListener("pointerleave", () => this.hideTip());
+    svg.addEventListener("dblclick", () => this.reset());
+    // Os marcadores mantêm o tamanho em pixels quando a janela muda de largura
+    window.addEventListener("resize", () => this.apply());
   }
-  const full = Math.max(PLANTA_BOUNDS.w, PLANTA_BOUNDS.h, 1);
-  const nw = Math.min(Math.max(PLANTA_VIEW.w * factor, 0.5), full * 8);
-  const k = nw / PLANTA_VIEW.w;
-  PLANTA_VIEW.x = ax - (ax - PLANTA_VIEW.x) * k;
-  PLANTA_VIEW.y = ay - (ay - PLANTA_VIEW.y) * k;
-  PLANTA_VIEW.w = nw;
-  PLANTA_VIEW.h *= k;
-  applyPlantaView();
-}
 
-function onPlantaWheel(e) {
-  e.preventDefault();
-  hidePlantaTooltip();
-  zoomPlanta(e.deltaY < 0 ? 0.85 : 1 / 0.85, e.clientX, e.clientY);
-}
-
-function onPlantaDown(e) {
-  if (!PLANTA_VIEW) return;
-  if (e.button !== 0 && e.button !== 1) return;
-  PLANTA_DRAG = { x: e.clientX, y: e.clientY, vx: PLANTA_VIEW.x, vy: PLANTA_VIEW.y };
-  try { PLANTA_SVG.setPointerCapture(e.pointerId); } catch (_) { /* ponteiro já liberado */ }
-  PLANTA_SVG.classList.add("is-dragging");
-  hidePlantaTooltip();
-}
-
-function onPlantaMove(e) {
-  if (PLANTA_DRAG && PLANTA_VIEW) {
-    const s = plantaScale();
-    PLANTA_VIEW.x = PLANTA_DRAG.vx - (e.clientX - PLANTA_DRAG.x) / s;
-    PLANTA_VIEW.y = PLANTA_DRAG.vy - (e.clientY - PLANTA_DRAG.y) / s;
-    applyPlantaView();
-    return;
+  scale() {
+    const r = this.svg.getBoundingClientRect();
+    return Math.min(r.width / this.view.w, r.height / this.view.h) || 1;
   }
-  showPlantaTooltip(e);
-}
 
-function onPlantaUp(e) {
-  if (!PLANTA_DRAG) return;
-  try { PLANTA_SVG.releasePointerCapture?.(e.pointerId); } catch (_) { /* ponteiro já liberado */ }
-  PLANTA_SVG.classList.remove("is-dragging");
-  PLANTA_DRAG = null;
+  apply() {
+    if (!this.view) return;
+    this.svg.setAttribute("viewBox", `${this.view.x} ${this.view.y} ${this.view.w} ${this.view.h}`);
+    const s = this.scale();
+    this.sized.forEach(({ el, px }) => el.setAttribute("r", (px / s).toFixed(4)));
+  }
+
+  fit() {
+    const w = Math.max(this.bounds.w, 1);
+    const h = Math.max(this.bounds.h, 1);
+    const pad = Math.max(w, h) * 0.04;
+    this.view = { x: -pad, y: -pad, w: w + pad * 2, h: h + pad * 2 };
+    this.apply();
+  }
+
+  reset() {
+    if (this.view) this.fit();
+  }
+
+  zoom(factor, clientX, clientY) {
+    if (!this.view) return;
+    let ax = this.view.x + this.view.w / 2;
+    let ay = this.view.y + this.view.h / 2;
+    if (clientX != null) {
+      const p = this.svg.createSVGPoint();
+      p.x = clientX;
+      p.y = clientY;
+      const loc = p.matrixTransform(this.svg.getScreenCTM().inverse());
+      ax = loc.x;
+      ay = loc.y;
+    }
+    const full = Math.max(this.bounds.w, this.bounds.h, 1);
+    const nw = Math.min(Math.max(this.view.w * factor, 0.5), full * 8);
+    const k = nw / this.view.w;
+    this.view.x = ax - (ax - this.view.x) * k;
+    this.view.y = ay - (ay - this.view.y) * k;
+    this.view.w = nw;
+    this.view.h *= k;
+    this.apply();
+  }
+
+  onWheel(e) {
+    e.preventDefault();
+    this.hideTip();
+    this.zoom(e.deltaY < 0 ? 0.85 : 1 / 0.85, e.clientX, e.clientY);
+  }
+
+  onDown(e) {
+    if (!this.view) return;
+    if (e.button !== 0 && e.button !== 1) return;
+    this.drag = { x: e.clientX, y: e.clientY, vx: this.view.x, vy: this.view.y };
+    try { this.svg.setPointerCapture(e.pointerId); } catch (_) { /* ponteiro já liberado */ }
+    this.svg.classList.add("is-dragging");
+    this.hideTip();
+  }
+
+  onMove(e) {
+    if (this.drag && this.view) {
+      const s = this.scale();
+      this.view.x = this.drag.vx - (e.clientX - this.drag.x) / s;
+      this.view.y = this.drag.vy - (e.clientY - this.drag.y) / s;
+      this.apply();
+      return;
+    }
+    this.showTip(e);
+  }
+
+  onUp(e) {
+    if (!this.drag) return;
+    try { this.svg.releasePointerCapture?.(e.pointerId); } catch (_) { /* ponteiro já liberado */ }
+    this.svg.classList.remove("is-dragging");
+    this.drag = null;
+  }
+
+  clearHover() {
+    if (this.hover) this.hover.forEach((n) => n.classList.remove("is-hover"));
+    this.hover = null;
+  }
+
+  hideTip() {
+    this.clearHover();
+    if (this.tip) this.tip.hidden = true;
+  }
+
+  showTip(e) {
+    const node = e.target.closest?.("[data-idx]");
+    if (!this.tip || !node || !this.svg.contains(node)) { this.hideTip(); return; }
+    const idx = Number(node.dataset.idx);
+    const item = this.items[idx];
+    if (!item) { this.hideTip(); return; }
+    if (!this.hover || !this.hover.includes(node)) {
+      this.clearHover();
+      this.hover = [...this.content.querySelectorAll(`[data-idx="${idx}"]`)];
+      this.hover.forEach((n) => n.classList.add("is-hover"));
+    }
+    buildPlantaTooltip(this.tip, item, this.mode);
+    this.tip.hidden = false;
+    placePlantaTip(this.tip, this.wrap, e);
+  }
+
+  render(items, key) {
+    this.content.replaceChildren();
+    this.sized = [];
+    this.items = items;
+    this.hideTip();
+    if (!items.length) {
+      this.view = null;
+      this.key = "";
+      this.svg.setAttribute("viewBox", "0 0 600 380");
+      return;
+    }
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    const pushPt = (q) => {
+      if (q.x < minX) minX = q.x;
+      if (q.x > maxX) maxX = q.x;
+      if (q.y < minY) minY = q.y;
+      if (q.y > maxY) maxY = q.y;
+    };
+    items.forEach((it) => { if (it.p) pushPt(it.p); if (it.r) pushPt(it.r); });
+    // A origem só muda quando o filtro muda; assim a vista não salta no auto-refresh.
+    if (key !== this.key || !this.view) {
+      this.key = key;
+      this.origin = { x: minX, y: maxY };
+      this.bounds = { w: maxX - minX, h: maxY - minY };
+      this.fit();
+    }
+    plantaDrawItems(this.content, items, this.origin, this.sized, this.mode);
+    this.apply();
+  }
 }
 
 function setupPlantaMap() {
-  if (PLANTA_SVG) return;
-  const svg = document.getElementById("planta-map");
-  if (!svg) return;
-  PLANTA_SVG = svg;
-  PLANTA_CONTENT = plantaEl("g", { class: "planta-content" }, svg);
-  svg.addEventListener("wheel", onPlantaWheel, { passive: false });
-  svg.addEventListener("pointerdown", onPlantaDown);
-  svg.addEventListener("pointermove", onPlantaMove);
-  svg.addEventListener("pointerup", onPlantaUp);
-  svg.addEventListener("pointercancel", onPlantaUp);
-  svg.addEventListener("pointerleave", hidePlantaTooltip);
-  svg.addEventListener("dblclick", resetPlantaView);
-  // Os marcadores mantêm o tamanho em pixels quando a janela muda de largura
-  window.addEventListener("resize", () => {
-    if (PLANTA_VIEW) applyPlantaView();
-    PLANTA_CARDS.forEach((c) => c.apply());
-  });
-  document.getElementById("planta-zoom-in")?.addEventListener("click", () => zoomPlanta(0.8));
-  document.getElementById("planta-zoom-out")?.addEventListener("click", () => zoomPlanta(1.25));
-  document.getElementById("planta-zoom-reset")?.addEventListener("click", resetPlantaView);
-  document.getElementById("planta-open-dialog")?.addEventListener("click", openPlantaDialog);
+  if (PLANTA_MAPS) return;
+  const xySvg = document.getElementById("planta-map-xy");
+  const zSvg = document.getElementById("planta-map-z");
+  if (!xySvg || !zSvg) return;
+  PLANTA_MAPS = {
+    xy: new PlantaMap(xySvg, document.getElementById("planta-tooltip-xy"), "xy"),
+    z: new PlantaMap(zSvg, document.getElementById("planta-tooltip-z"), "z"),
+  };
+  const bind = (mode) => {
+    const map = PLANTA_MAPS[mode];
+    document.getElementById(`planta-${mode}-zoom-in`)?.addEventListener("click", () => map.zoom(0.8));
+    document.getElementById(`planta-${mode}-zoom-out`)?.addEventListener("click", () => map.zoom(1.25));
+    document.getElementById(`planta-${mode}-zoom-reset`)?.addEventListener("click", () => map.reset());
+    document.getElementById(`planta-open-${mode}`)?.addEventListener("click", () => openPlantaDialog(mode));
+  };
+  bind("xy");
+  bind("z");
+  window.addEventListener("resize", () => PLANTA_CARDS.forEach((c) => c.apply()));
   document.getElementById("planta-dialog-close")?.addEventListener("click", () => document.getElementById("planta-dialog")?.close());
   document.getElementById("planta-dialog")?.addEventListener("close", closePlantaDialog);
   document.getElementById("planta-dialog-pdf")?.addEventListener("click", exportPlantaPdf);
@@ -309,25 +397,13 @@ function setupPlantaMap() {
   dlgEl?.addEventListener("click", (e) => { if (e.target === dlgEl) dlgEl.close(); });
 }
 
-function clearPlantaHover() {
-  if (!PLANTA_HOVER) return;
-  PLANTA_HOVER.forEach((node) => node.classList.remove("is-hover"));
-  PLANTA_HOVER = null;
-}
-
-function hidePlantaTooltip() {
-  clearPlantaHover();
-  const tip = document.getElementById("planta-tooltip");
-  if (tip) tip.hidden = true;
-}
-
-function plantaStatusText(item) {
+function plantaStatusText(item, mode) {
   if (item.kind === "planned") return "Previsto sem furo realizado";
   if (item.kind === "realized") return "Realizado sem previsto correspondente (fora do cálculo)";
-  return PLANTA_STATUS_LABEL[plantaStatus(item)];
+  return PLANTA_MODE_LABEL[mode][plantaStatusFor(item, mode)];
 }
 
-function buildPlantaTooltip(tip, item) {
+function buildPlantaTooltip(tip, item, mode) {
   const head = document.createElement("strong");
   head.className = "planta-tooltip__title";
   const rows = [];
@@ -336,16 +412,16 @@ function buildPlantaTooltip(tip, item) {
   const plan = PLANTA_PLANS.get(item.plano);
   if (item.kind === "planned") {
     head.textContent = `${item.plano} · previsto sem furo realizado`;
-    add("Status", plantaStatusText(item));
+    add("Status", plantaStatusText(item, mode));
     add("Previsto", xyz(item.p));
-    add("Diâmetro", item.p.d != null ? fmtNum(item.p.d, 0) : "não informado");
+    add("Diâmetro", item.p.d != null ? `${fmtDiam(item.p.d)} mm` : "não informado");
   } else if (item.kind === "realized") {
     head.textContent = `${item.plano} · furo ${item.id || "s/ ID"}`;
-    add("Status", plantaStatusText(item));
+    add("Status", plantaStatusText(item, mode));
     add("Realizado", xyz(item.r));
   } else {
     head.textContent = `${item.plano} · furo ${item.id || "s/ ID"}`;
-    add("Status", plantaStatusText(item));
+    add("Status", plantaStatusText(item, mode));
     add("Previsto", xyz(item.p));
     add("Realizado", xyz(item.r));
     const lim = tolXY(item.p);
@@ -368,62 +444,310 @@ function buildPlantaTooltip(tip, item) {
   tip.replaceChildren(head, dl);
 }
 
-function showPlantaTooltip(e) {
-  const tip = document.getElementById("planta-tooltip");
-  const node = e.target.closest?.("[data-idx]");
-  if (!tip || !node || !PLANTA_SVG.contains(node)) { hidePlantaTooltip(); return; }
-  const idx = Number(node.dataset.idx);
-  const item = PLANTA_ITEMS[idx];
-  if (!item) { hidePlantaTooltip(); return; }
-  if (!PLANTA_HOVER || !PLANTA_HOVER.includes(node)) {
-    clearPlantaHover();
-    PLANTA_HOVER = [...PLANTA_CONTENT.querySelectorAll(`[data-idx="${idx}"]`)];
-    PLANTA_HOVER.forEach((n) => n.classList.add("is-hover"));
-  }
-  buildPlantaTooltip(tip, item);
-  tip.hidden = false;
-  const box = PLANTA_SVG.parentElement.getBoundingClientRect();
-  const tw = tip.offsetWidth;
-  const th = tip.offsetHeight;
-  let left = e.clientX - box.left + 16;
-  let top = e.clientY - box.top + 16;
-  if (left + tw > box.width) left = e.clientX - box.left - tw - 16;
-  if (top + th > box.height) top = e.clientY - box.top - th - 16;
-  tip.style.left = `${Math.max(0, left)}px`;
-  tip.style.top = `${Math.max(0, top)}px`;
+/* Desenho dos furos (ligações, previstos e realizados) colorido pelo eixo "mode". */
+function plantaDrawItems(content, items, origin, sized, mode) {
+  const lx = (q) => q.x - origin.x;
+  const ly = (q) => origin.y - q.y;
+  const links = plantaEl("g", { class: "planta-links" }, content);
+  const planned = plantaEl("g", { class: "planta-planned" }, content);
+  const real = plantaEl("g", { class: "planta-real" }, content);
+  const ring = (q, idx, dashed) => {
+    const el = plantaEl("circle", {
+      cx: lx(q), cy: ly(q), r: 1,
+      class: "planta-ring" + (dashed ? " planta-ring--dashed" : ""),
+      "data-idx": idx,
+    }, planned);
+    sized.push({ el, px: 4.2 });
+  };
+  const dot = (q, color, idx) => {
+    const el = plantaEl("circle", {
+      cx: lx(q), cy: ly(q), r: 1, fill: color,
+      class: "planta-dot", "data-idx": idx,
+    }, real);
+    sized.push({ el, px: 3.4 });
+  };
+  items.forEach((it, idx) => {
+    if (it.kind === "match") {
+      plantaEl("line", {
+        x1: lx(it.p), y1: ly(it.p), x2: lx(it.r), y2: ly(it.r),
+        stroke: PLANTA_COLORS.link, class: "planta-link",
+      }, links);
+      ring(it.p, idx, false);
+      dot(it.r, PLANTA_COLORS[plantaStatusFor(it, mode)], idx);
+    } else if (it.kind === "planned") {
+      ring(it.p, idx, true);
+    } else {
+      dot(it.r, PLANTA_COLORS.blue, idx);
+    }
+  });
 }
 
-function renderPlantaMap(items, key) {
-  setupPlantaMap();
-  if (!PLANTA_SVG) return;
-  PLANTA_CONTENT.replaceChildren();
-  PLANTA_SIZED = [];
-  PLANTA_ITEMS = items;
-  hidePlantaTooltip();
+/* ---------- Janela "Ver todos os planos": um bloco por plano, com rolagem ---------- */
+function buildPlantaCard(plano, items, mode) {
+  const card = document.createElement("article");
+  card.className = "planta-card";
 
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  const pushPt = (q) => {
-    if (q.x < minX) minX = q.x; if (q.x > maxX) maxX = q.x;
-    if (q.y < minY) minY = q.y; if (q.y > maxY) maxY = q.y;
+  const head = document.createElement("header");
+  head.className = "planta-card__head";
+  const title = document.createElement("strong");
+  title.textContent = plano;
+  const m = PLANTA_PLANS.get(plano) || { n: 0, xyPct: null, zPct: null };
+  const meta = document.createElement("span");
+  meta.className = "planta-card__meta";
+  meta.textContent = `${fmtInt(m.n)} furos · XY ${pct2(m.xyPct)} · Z ${pct2(m.zPct)}`;
+  head.append(title, meta);
+
+  const tools = document.createElement("div");
+  tools.className = "planta-card__tools";
+  const btn = (label, aria) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "filter-reset";
+    b.textContent = label;
+    if (aria) b.setAttribute("aria-label", aria);
+    return b;
   };
-  items.forEach((it) => {
-    if (it.p) pushPt(it.p);
-    if (it.r) pushPt(it.r);
+  const bIn = btn("+", "Aproximar");
+  const bOut = btn("−", "Afastar");
+  const bReset = btn("Redefinir");
+  tools.append(bIn, bOut, bReset);
+
+  const wrap = document.createElement("div");
+  wrap.className = "planta-card__map";
+  const svg = plantaEl("svg", {
+    class: "planta-card__svg",
+    preserveAspectRatio: "xMidYMid meet",
+    role: "img",
+    "aria-label": `${PLANTA_MODE_TITLE[mode]} do plano ${plano}: collar previsto e realizado`,
   });
+  const content = plantaEl("g", { class: "planta-content" }, svg);
+  const tip = document.createElement("div");
+  tip.className = "planta-tooltip";
+  tip.hidden = true;
+  wrap.append(svg, tip);
+  card.append(head, tools, wrap);
+
+  const sized = [];
+  let view = null;
+  let bounds = { w: 1, h: 1 };
+  let drag = null;
+  let hover = null;
+
   if (!items.length) {
-    PLANTA_VIEW = null;
-    PLANTA_KEY = "";
+    const t = plantaEl("text", { x: 300, y: 190, "text-anchor": "middle", class: "planta-svg__empty" }, svg);
+    t.textContent = "Sem furos no filtro atual";
+    svg.setAttribute("viewBox", "0 0 600 380");
+  } else {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    const pushPt = (q) => {
+      if (q.x < minX) minX = q.x;
+      if (q.x > maxX) maxX = q.x;
+      if (q.y < minY) minY = q.y;
+      if (q.y > maxY) maxY = q.y;
+    };
+    items.forEach((it) => { if (it.p) pushPt(it.p); if (it.r) pushPt(it.r); });
+    bounds = { w: Math.max(maxX - minX, 1), h: Math.max(maxY - minY, 1) };
+    plantaDrawItems(content, items, { x: minX, y: maxY }, sized, mode);
+  }
+
+  const scale = () => {
+    const r = svg.getBoundingClientRect();
+    return Math.min(r.width / view.w, r.height / view.h) || 1;
+  };
+  const apply = () => {
+    if (!view) return;
+    svg.setAttribute("viewBox", `${view.x} ${view.y} ${view.w} ${view.h}`);
+    const s = scale();
+    sized.forEach(({ el, px }) => el.setAttribute("r", (px / s).toFixed(4)));
+  };
+  const fit = () => {
+    if (!items.length) return;
+    const pad = Math.max(bounds.w, bounds.h) * 0.04;
+    view = { x: -pad, y: -pad, w: bounds.w + pad * 2, h: bounds.h + pad * 2 };
+    apply();
+  };
+  const zoomAt = (factor, clientX, clientY) => {
+    if (!view) return;
+    let ax = view.x + view.w / 2;
+    let ay = view.y + view.h / 2;
+    if (clientX != null) {
+      const p = svg.createSVGPoint();
+      p.x = clientX;
+      p.y = clientY;
+      const loc = p.matrixTransform(svg.getScreenCTM().inverse());
+      ax = loc.x;
+      ay = loc.y;
+    }
+    const full = Math.max(bounds.w, bounds.h, 1);
+    const nw = Math.min(Math.max(view.w * factor, 0.5), full * 8);
+    const k = nw / view.w;
+    view.x = ax - (ax - view.x) * k;
+    view.y = ay - (ay - view.y) * k;
+    view.w = nw;
+    view.h *= k;
+    apply();
+  };
+  const clearHover = () => {
+    if (hover) hover.forEach((n) => n.classList.remove("is-hover"));
+    hover = null;
+  };
+  const hideTip = () => {
+    tip.hidden = true;
+    clearHover();
+  };
+  const showTip = (e) => {
+    const node = e.target.closest?.("[data-idx]");
+    if (!node || !svg.contains(node)) { hideTip(); return; }
+    const item = items[Number(node.dataset.idx)];
+    if (!item) { hideTip(); return; }
+    if (!hover || !hover.includes(node)) {
+      clearHover();
+      hover = [...content.querySelectorAll(`[data-idx="${node.dataset.idx}"]`)];
+      hover.forEach((n) => n.classList.add("is-hover"));
+    }
+    buildPlantaTooltip(tip, item, mode);
+    tip.hidden = false;
+    placePlantaTip(tip, wrap, e);
+  };
+
+  // Roda sem tecla rola a janela; Ctrl + roda dá zoom no plano
+  svg.addEventListener("wheel", (e) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    hideTip();
+    zoomAt(e.deltaY < 0 ? 0.85 : 1 / 0.85, e.clientX, e.clientY);
+  }, { passive: false });
+  svg.addEventListener("pointerdown", (e) => {
+    if (!view || (e.button !== 0 && e.button !== 1)) return;
+    drag = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y };
+    try { svg.setPointerCapture(e.pointerId); } catch (_) { /* ponteiro já liberado */ }
+    svg.classList.add("is-dragging");
+    hideTip();
+  });
+  svg.addEventListener("pointermove", (e) => {
+    if (drag && view) {
+      const s = scale();
+      view.x = drag.vx - (e.clientX - drag.x) / s;
+      view.y = drag.vy - (e.clientY - drag.y) / s;
+      apply();
+      return;
+    }
+    showTip(e);
+  });
+  const endDrag = (e) => {
+    if (!drag) return;
+    try { svg.releasePointerCapture?.(e.pointerId); } catch (_) { /* ponteiro já liberado */ }
+    svg.classList.remove("is-dragging");
+    drag = null;
+  };
+  svg.addEventListener("pointerup", endDrag);
+  svg.addEventListener("pointercancel", endDrag);
+  svg.addEventListener("pointerleave", hideTip);
+  svg.addEventListener("dblclick", fit);
+  bIn.addEventListener("click", () => zoomAt(0.8));
+  bOut.addEventListener("click", () => zoomAt(1.25));
+  bReset.addEventListener("click", fit);
+
+  PLANTA_CARDS.push({ apply: () => apply() });
+  // o enquadramento inicial acontece quando o card já está no layout
+  requestAnimationFrame(() => { fit(); });
+  return card;
+}
+
+function renderPlanDialog() {
+  const dlg = document.getElementById("planta-dialog");
+  const body = document.getElementById("planta-dialog-body");
+  const titulo = document.getElementById("planta-dialog-title");
+  if (!dlg || !body || !dlg.open) return;
+  if (titulo) titulo.textContent = `${PLANTA_MODE_TITLE[PLANTA_DIALOG_MODE]} · todos os planos`;
+  const sub = document.getElementById("planta-dialog-sub");
+  if (sub) sub.textContent = PLANTA_DIALOG_MODE === "z"
+    ? "Cada furo colorido pela diferença de cota (realizado − previsto): verde dentro de ±0,50 m, vermelho fora. Mesmo filtro da página. Role a janela para ver todos os planos. Em cada plano: Ctrl + roda do mouse para zoom, arraste para mover, duplo clique para redefinir."
+    : "Cada furo colorido pela distância em planta entre o collar previsto e o realizado: verde dentro de 2 × diâmetro projetado, vermelho fora. Mesmo filtro da página. Role a janela para ver todos os planos. Em cada plano: Ctrl + roda do mouse para zoom, arraste para mover, duplo clique para redefinir.";
+  PLANTA_CARDS = [];
+  destroy("plantaDlgXY");
+  destroy("plantaDlgZ");
+  body.replaceChildren();
+  if (!PLANTA_PLANS.size) {
+    const empty = document.createElement("p");
+    empty.className = "planta-dialog__empty";
+    empty.textContent = "Nenhum plano com coordenadas previstas no filtro atual.";
+    body.appendChild(empty);
     return;
   }
-  // A origem só muda quando o filtro muda; assim a vista não salta no auto-refresh.
-  if (key !== PLANTA_KEY || !PLANTA_VIEW) {
-    PLANTA_KEY = key;
-    PLANTA_ORIGIN = { x: minX, y: maxY };
-    PLANTA_BOUNDS = { w: maxX - minX, h: maxY - minY };
-    fitPlantaView();
-  }
-  plantaDrawItems(PLANTA_CONTENT, items, PLANTA_ORIGIN, PLANTA_SIZED);
-  applyPlantaView();
+  const grid = document.createElement("div");
+  grid.className = "planta-dialog__grid";
+  [...PLANTA_PLANS.keys()].forEach((plano) => {
+    const items = PLANTA_ITEMS.filter((it) => it.plano === plano);
+    grid.appendChild(buildPlantaCard(plano, items, PLANTA_DIALOG_MODE));
+  });
+  body.appendChild(grid);
+  if (PLANTA_CHART_DATA) body.appendChild(buildPlanDialogCharts());
+}
+
+/* Gráficos XY e Z no fim da janela */
+function buildPlanDialogCharts() {
+  const section = document.createElement("section");
+  section.className = "planta-dialog__charts";
+  const titles = [
+    ["XY", "Furos com distância previsto × realizado em planta dentro da tolerância XY", "planta-dlg-chart-xy"],
+    ["Z", "Furos com cota realizada dentro da tolerância Z em relação ao previsto", "planta-dlg-chart-z"],
+  ];
+  titles.forEach(([name, text, id]) => {
+    const head = document.createElement("h3");
+    head.className = "planta-dialog__chart-title";
+    head.textContent = name;
+    const sub = document.createElement("p");
+    sub.className = "planta-dialog__chart-sub";
+    sub.textContent = text;
+    const box = document.createElement("div");
+    box.className = "planta-dialog__chart-box";
+    const scroll = document.createElement("div");
+    scroll.className = "chart-scroll";
+    const canvas = document.createElement("canvas");
+    canvas.id = id;
+    scroll.appendChild(canvas);
+    box.appendChild(scroll);
+    section.append(head, sub, box);
+  });
+  // os canvas já estão no documento quando os gráficos são criados
+  queueMicrotask(() => {
+    const { labels, xy, z, furos } = PLANTA_CHART_DATA;
+    CHARTS.plantaDlgXY = new Chart(document.getElementById("planta-dlg-chart-xy"), plantaChartConfig(labels, xy, furos));
+    CHARTS.plantaDlgZ = new Chart(document.getElementById("planta-dlg-chart-z"), plantaChartConfig(labels, z, furos));
+  });
+  return section;
+}
+
+function openPlantaDialog(mode) {
+  const dlg = document.getElementById("planta-dialog");
+  if (!dlg || dlg.open) return;
+  PLANTA_DIALOG_MODE = mode === "z" ? "z" : "xy";
+  dlg.showModal();
+  renderPlanDialog();
+}
+
+function closePlantaDialog() {
+  const body = document.getElementById("planta-dialog-body");
+  PLANTA_CARDS = [];
+  destroy("plantaDlgXY");
+  destroy("plantaDlgZ");
+  if (body) body.replaceChildren();
+  setPlanDialogStatus("");
+}
+
+function setPlanDialogStatus(text) {
+  const el = document.getElementById("planta-dialog-status");
+  if (!el) return;
+  el.textContent = text || "";
+  el.hidden = !text;
+}
+
+function setPlantaStatus(text) {
+  const el = document.getElementById("planta-status");
+  if (!el) return;
+  el.textContent = text || "";
+  el.classList.toggle("is-visible", Boolean(text));
 }
 
 /* ---------- Gráficos de aderência XY e Z ---------- */
@@ -533,13 +857,6 @@ function plantaChartConfig(labels, values, furos) {
   };
 }
 
-function setPlantaStatus(text) {
-  const el = document.getElementById("planta-status");
-  if (!el) return;
-  el.textContent = text || "";
-  el.classList.toggle("is-visible", Boolean(text));
-}
-
 /* ---------- Desenho do bloco ---------- */
 async function drawPlanta() {
   const charts = document.getElementById("planta-charts");
@@ -547,7 +864,7 @@ async function drawPlanta() {
   const token = ++PLANTA_TOKEN;
 
   if (subtitle) {
-    subtitle.textContent = `Todos os planos do filtro em uma só planta · deslocamento XY até 2 × diâmetro projetado do furo · Z ±${fmtNum(COLLAR_TOL_Z, 2)} m · cada collar previsto é pareado ao realizado mais próximo (até ${fmtNum(COLLAR_MATCH_MAX, 1)} m).`;
+    subtitle.textContent = `Dois mapas em planta do mesmo filtro: XY (deslocamento de até 2 × diâmetro projetado do furo) e Z (±${fmtNum(COLLAR_TOL_Z, 2)} m) · cada collar previsto é pareado ao realizado mais próximo (até ${fmtNum(COLLAR_MATCH_MAX, 1)} m).`;
   }
   setupPlantaMap();
 
@@ -555,7 +872,10 @@ async function drawPlanta() {
     const ch = document.getElementById("planta-charts");
     if (ch) ch.hidden = true;
     PLANTA_PLANS = new Map();
-    renderPlantaMap([], "");
+    if (PLANTA_MAPS) {
+      PLANTA_MAPS.xy.render([], "");
+      PLANTA_MAPS.z.render([], "");
+    }
     destroy("plantaXY");
     destroy("plantaZ");
   };
@@ -622,7 +942,7 @@ async function drawPlanta() {
     return;
   }
 
-  // Itens do mapa: cada collar previsto/realizado com o plano e a métrica
+  // Itens do filtro: cada collar previsto/realizado com o plano e a métrica
   const items = [];
   PLANTA_PLANS = new Map();
   planos.forEach((p) => {
@@ -633,9 +953,11 @@ async function drawPlanta() {
     p.unmatchedR.forEach((r) => items.push({ kind: "realized", plano: p.plano, id: r.id, r }));
     p.unmatchedP.forEach((q) => items.push({ kind: "planned", plano: p.plano, p: q }));
   });
+  PLANTA_ITEMS = items;
 
   const key = [selected, tf.y, tf.mo, planos.map((p) => p.plano).join(",")].join("|");
-  renderPlantaMap(items, key);
+  PLANTA_MAPS.xy.render(items, key);
+  PLANTA_MAPS.z.render(items, key);
 
   const rows = planos.map((p) => ({ plano: p.plano, ...PLANTA_PLANS.get(p.plano) }));
   const all = plantaMetrics(planos.flatMap((p) => p.matches));
@@ -658,310 +980,7 @@ async function drawPlanta() {
   if (document.getElementById("planta-dialog")?.open) renderPlanDialog();
 }
 
-/* ---------- Desenho compartilhado: pontos, anéis e ligações ---------- */
-let PLANTA_CARDS = []; // cards da janela "Ver todos os planos" (para redimensionar)
-let PLANTA_CHART_DATA = null; // dados dos gráficos XY e Z do último desenho
-
-function plantaDrawItems(content, items, origin, sized) {
-  const lx = (q) => q.x - origin.x;
-  const ly = (q) => origin.y - q.y;
-  const links = plantaEl("g", { class: "planta-links" }, content);
-  const planned = plantaEl("g", { class: "planta-planned" }, content);
-  const real = plantaEl("g", { class: "planta-real" }, content);
-  const ring = (q, idx, dashed) => {
-    const el = plantaEl("circle", {
-      cx: lx(q), cy: ly(q), r: 1,
-      class: "planta-ring" + (dashed ? " planta-ring--dashed" : ""),
-      "data-idx": idx,
-    }, planned);
-    sized.push({ el, px: 4.2 });
-  };
-  const dot = (q, color, idx) => {
-    const el = plantaEl("circle", {
-      cx: lx(q), cy: ly(q), r: 1, fill: color,
-      class: "planta-dot", "data-idx": idx,
-    }, real);
-    sized.push({ el, px: 3.4 });
-  };
-  items.forEach((it, idx) => {
-    if (it.kind === "match") {
-      plantaEl("line", {
-        x1: lx(it.p), y1: ly(it.p), x2: lx(it.r), y2: ly(it.r),
-        stroke: PLANTA_COLORS.link, class: "planta-link",
-      }, links);
-      ring(it.p, idx, false);
-      dot(it.r, PLANTA_COLORS[plantaStatus(it)], idx);
-    } else if (it.kind === "planned") {
-      ring(it.p, idx, true);
-    } else {
-      dot(it.r, PLANTA_COLORS.blue, idx);
-    }
-  });
-}
-
-/* ---------- Janela "Ver todos os planos": um bloco por plano, com rolagem ---------- */
-function buildPlantaCard(plano, items) {
-  const card = document.createElement("article");
-  card.className = "planta-card";
-
-  const head = document.createElement("header");
-  head.className = "planta-card__head";
-  const title = document.createElement("strong");
-  title.textContent = plano;
-  const m = PLANTA_PLANS.get(plano) || { n: 0, xyPct: null, zPct: null };
-  const meta = document.createElement("span");
-  meta.className = "planta-card__meta";
-  meta.textContent = `${fmtInt(m.n)} furos · XY ${pct2(m.xyPct)} · Z ${pct2(m.zPct)}`;
-  head.append(title, meta);
-
-  const tools = document.createElement("div");
-  tools.className = "planta-card__tools";
-  const btn = (label, aria) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "filter-reset";
-    b.textContent = label;
-    if (aria) b.setAttribute("aria-label", aria);
-    return b;
-  };
-  const bIn = btn("+", "Aproximar");
-  const bOut = btn("−", "Afastar");
-  const bReset = btn("Redefinir");
-  tools.append(bIn, bOut, bReset);
-
-  const wrap = document.createElement("div");
-  wrap.className = "planta-card__map";
-  const svg = plantaEl("svg", {
-    class: "planta-card__svg",
-    preserveAspectRatio: "xMidYMid meet",
-    role: "img",
-    "aria-label": `Planta do plano ${plano}: collar previsto e realizado`,
-  });
-  const content = plantaEl("g", { class: "planta-content" }, svg);
-  const tip = document.createElement("div");
-  tip.className = "planta-tooltip";
-  tip.hidden = true;
-  wrap.append(svg, tip);
-  card.append(head, tools, wrap);
-
-  const sized = [];
-  let view = null;
-  let bounds = { w: 1, h: 1 };
-  let drag = null;
-  let hover = null;
-
-  if (!items.length) {
-    const t = plantaEl("text", { x: 300, y: 190, "text-anchor": "middle", class: "planta-svg__empty" }, svg);
-    t.textContent = "Sem furos no filtro atual";
-    svg.setAttribute("viewBox", "0 0 600 380");
-  } else {
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    const pushPt = (q) => {
-      if (q.x < minX) minX = q.x;
-      if (q.x > maxX) maxX = q.x;
-      if (q.y < minY) minY = q.y;
-      if (q.y > maxY) maxY = q.y;
-    };
-    items.forEach((it) => { if (it.p) pushPt(it.p); if (it.r) pushPt(it.r); });
-    bounds = { w: Math.max(maxX - minX, 1), h: Math.max(maxY - minY, 1) };
-    plantaDrawItems(content, items, { x: minX, y: maxY }, sized);
-  }
-
-  const scale = () => {
-    const r = svg.getBoundingClientRect();
-    return Math.min(r.width / view.w, r.height / view.h) || 1;
-  };
-  const apply = () => {
-    if (!view) return;
-    svg.setAttribute("viewBox", `${view.x} ${view.y} ${view.w} ${view.h}`);
-    const s = scale();
-    sized.forEach(({ el, px }) => el.setAttribute("r", (px / s).toFixed(4)));
-  };
-  const fit = () => {
-    if (!items.length) return;
-    const pad = Math.max(bounds.w, bounds.h) * 0.04;
-    view = { x: -pad, y: -pad, w: bounds.w + pad * 2, h: bounds.h + pad * 2 };
-    apply();
-  };
-  const zoomAt = (factor, clientX, clientY) => {
-    if (!view) return;
-    let ax = view.x + view.w / 2;
-    let ay = view.y + view.h / 2;
-    if (clientX != null) {
-      const p = svg.createSVGPoint();
-      p.x = clientX;
-      p.y = clientY;
-      const loc = p.matrixTransform(svg.getScreenCTM().inverse());
-      ax = loc.x;
-      ay = loc.y;
-    }
-    const full = Math.max(bounds.w, bounds.h, 1);
-    const nw = Math.min(Math.max(view.w * factor, 0.5), full * 8);
-    const k = nw / view.w;
-    view.x = ax - (ax - view.x) * k;
-    view.y = ay - (ay - view.y) * k;
-    view.w = nw;
-    view.h *= k;
-    apply();
-  };
-  const clearHover = () => {
-    if (hover) hover.forEach((n) => n.classList.remove("is-hover"));
-    hover = null;
-  };
-  const hideTip = () => {
-    tip.hidden = true;
-    clearHover();
-  };
-  const showTip = (e) => {
-    const node = e.target.closest?.("[data-idx]");
-    if (!node || !svg.contains(node)) { hideTip(); return; }
-    const item = items[Number(node.dataset.idx)];
-    if (!item) { hideTip(); return; }
-    if (!hover || !hover.includes(node)) {
-      clearHover();
-      hover = [...content.querySelectorAll(`[data-idx="${node.dataset.idx}"]`)];
-      hover.forEach((n) => n.classList.add("is-hover"));
-    }
-    buildPlantaTooltip(tip, item);
-    tip.hidden = false;
-    const box = wrap.getBoundingClientRect();
-    const tw = tip.offsetWidth;
-    const th = tip.offsetHeight;
-    let left = e.clientX - box.left + 16;
-    let top = e.clientY - box.top + 16;
-    if (left + tw > box.width) left = e.clientX - box.left - tw - 16;
-    if (top + th > box.height) top = e.clientY - box.top - th - 16;
-    tip.style.left = `${Math.max(0, left)}px`;
-    tip.style.top = `${Math.max(0, top)}px`;
-  };
-
-  // Roda sem tecla rola a janela; Ctrl + roda dá zoom no plano
-  svg.addEventListener("wheel", (e) => {
-    if (!(e.ctrlKey || e.metaKey)) return;
-    e.preventDefault();
-    hideTip();
-    zoomAt(e.deltaY < 0 ? 0.85 : 1 / 0.85, e.clientX, e.clientY);
-  }, { passive: false });
-  svg.addEventListener("pointerdown", (e) => {
-    if (!view || (e.button !== 0 && e.button !== 1)) return;
-    drag = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y };
-    try { svg.setPointerCapture(e.pointerId); } catch (_) { /* ponteiro já liberado */ }
-    svg.classList.add("is-dragging");
-    hideTip();
-  });
-  svg.addEventListener("pointermove", (e) => {
-    if (drag && view) {
-      const s = scale();
-      view.x = drag.vx - (e.clientX - drag.x) / s;
-      view.y = drag.vy - (e.clientY - drag.y) / s;
-      apply();
-      return;
-    }
-    showTip(e);
-  });
-  const endDrag = (e) => {
-    if (!drag) return;
-    try { svg.releasePointerCapture?.(e.pointerId); } catch (_) { /* ponteiro já liberado */ }
-    svg.classList.remove("is-dragging");
-    drag = null;
-  };
-  svg.addEventListener("pointerup", endDrag);
-  svg.addEventListener("pointercancel", endDrag);
-  svg.addEventListener("pointerleave", hideTip);
-  svg.addEventListener("dblclick", fit);
-  bIn.addEventListener("click", () => zoomAt(0.8));
-  bOut.addEventListener("click", () => zoomAt(1.25));
-  bReset.addEventListener("click", fit);
-
-  PLANTA_CARDS.push({ apply: () => apply() });
-  // o enquadramento inicial acontece quando o card já está no layout
-  requestAnimationFrame(() => { fit(); });
-  return card;
-}
-
-function renderPlanDialog() {
-  const dlg = document.getElementById("planta-dialog");
-  const body = document.getElementById("planta-dialog-body");
-  if (!dlg || !body || !dlg.open) return;
-  PLANTA_CARDS = [];
-  destroy("plantaDlgXY");
-  destroy("plantaDlgZ");
-  body.replaceChildren();
-  if (!PLANTA_PLANS.size) {
-    const empty = document.createElement("p");
-    empty.className = "planta-dialog__empty";
-    empty.textContent = "Nenhum plano com coordenadas previstas no filtro atual.";
-    body.appendChild(empty);
-    return;
-  }
-  const grid = document.createElement("div");
-  grid.className = "planta-dialog__grid";
-  [...PLANTA_PLANS.keys()].forEach((plano) => {
-    const items = PLANTA_ITEMS.filter((it) => it.plano === plano);
-    grid.appendChild(buildPlantaCard(plano, items));
-  });
-  body.appendChild(grid);
-  if (PLANTA_CHART_DATA) body.appendChild(buildPlanDialogCharts());
-}
-
-/* Gráficos XY e Z no fim da janela */
-function buildPlanDialogCharts() {
-  const section = document.createElement("section");
-  section.className = "planta-dialog__charts";
-  const titles = [
-    ["XY", "Furos com distância previsto × realizado em planta dentro da tolerância XY", "planta-dlg-chart-xy"],
-    ["Z", "Furos com cota realizada dentro da tolerância Z em relação ao previsto", "planta-dlg-chart-z"],
-  ];
-  titles.forEach(([name, text, id]) => {
-    const head = document.createElement("h3");
-    head.className = "planta-dialog__chart-title";
-    head.textContent = name;
-    const sub = document.createElement("p");
-    sub.className = "planta-dialog__chart-sub";
-    sub.textContent = text;
-    const box = document.createElement("div");
-    box.className = "planta-dialog__chart-box";
-    const scroll = document.createElement("div");
-    scroll.className = "chart-scroll";
-    const canvas = document.createElement("canvas");
-    canvas.id = id;
-    scroll.appendChild(canvas);
-    box.appendChild(scroll);
-    section.append(head, sub, box);
-  });
-  // os canvas já estão no documento quando os gráficos são criados
-  queueMicrotask(() => {
-    const { labels, xy, z, furos } = PLANTA_CHART_DATA;
-    CHARTS.plantaDlgXY = new Chart(document.getElementById("planta-dlg-chart-xy"), plantaChartConfig(labels, xy, furos));
-    CHARTS.plantaDlgZ = new Chart(document.getElementById("planta-dlg-chart-z"), plantaChartConfig(labels, z, furos));
-  });
-  return section;
-}
-
-function openPlantaDialog() {
-  const dlg = document.getElementById("planta-dialog");
-  if (!dlg || dlg.open) return;
-  dlg.showModal();
-  renderPlanDialog();
-}
-
-function closePlantaDialog() {
-  const body = document.getElementById("planta-dialog-body");
-  PLANTA_CARDS = [];
-  destroy("plantaDlgXY");
-  destroy("plantaDlgZ");
-  if (body) body.replaceChildren();
-  setPlanDialogStatus("");
-}
-
-function setPlanDialogStatus(text) {
-  const el = document.getElementById("planta-dialog-status");
-  if (!el) return;
-  el.textContent = text || "";
-  el.hidden = !text;
-}
-
-/* ---------- Exportação: imagem (PNG) e PDF com todos os planos e os gráficos ---------- */
+/* ---------- Exportação: imagem (PNG) e PDF do eixo da janela aberta ---------- */
 const PLANTA_JSPDF_URL = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
 let PLANTA_JSPDF_PROMISE = null;
 
@@ -993,7 +1012,7 @@ function plantaExportSubtitle() {
   return `Ano: ${sel("filter-year")} · Mês: ${sel("filter-month")} · Plano: ${sel("filter-plan")} · Gerado em ${new Date().toLocaleString("pt-BR")}`;
 }
 
-function drawPlantaCardCanvas(ctx, x, y, w, h, plano, items, m) {
+function drawPlantaCardCanvas(ctx, x, y, w, h, plano, items, m, mode) {
   const HEAD_H = 40;
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(x, y, w, h);
@@ -1062,7 +1081,7 @@ function drawPlantaCardCanvas(ctx, x, y, w, h, plano, items, m) {
   });
   items.forEach((it) => {
     if (it.kind !== "match" && it.kind !== "realized") return;
-    const color = it.kind === "match" ? PLANTA_COLORS[plantaStatus(it)] : PLANTA_COLORS.blue;
+    const color = it.kind === "match" ? PLANTA_COLORS[plantaStatusFor(it, mode)] : PLANTA_COLORS.blue;
     ctx.beginPath();
     ctx.arc(tx(it.r), ty(it.r), 3.5, 0, Math.PI * 2);
     ctx.fillStyle = color;
@@ -1073,8 +1092,8 @@ function drawPlantaCardCanvas(ctx, x, y, w, h, plano, items, m) {
   });
 }
 
-/* Gera a imagem completa: título, um bloco por plano e os gráficos XY e Z. Escala 2x. */
-function buildPlantaExportCanvas() {
+/* Gera a imagem do eixo "mode": título, um bloco por plano e os gráficos XY e Z. Escala 2x. */
+function buildPlantaExportCanvas(mode) {
   const DPR = 2;
   const M = 32, GAP = 24, CARD_W = 640, CARD_H = 400, COLS = 2, HEAD = 96;
   const CHART_H = 340;
@@ -1096,7 +1115,7 @@ function buildPlantaExportCanvas() {
 
   ctx.fillStyle = "#38424B";
   ctx.font = "700 20px Arial";
-  ctx.fillText("Aderência em planta · todos os planos", M, M + 20);
+  ctx.fillText(`Aderência em planta · ${PLANTA_MODE_TITLE[mode]} · todos os planos`, M, M + 20);
   ctx.fillStyle = "#6c747b";
   ctx.font = "12px Arial";
   ctx.fillText(plantaExportSubtitle(), M, M + 42);
@@ -1107,7 +1126,7 @@ function buildPlantaExportCanvas() {
     const x = M + col * (CARD_W + GAP);
     const y = HEAD + row * (CARD_H + GAP);
     const items = PLANTA_ITEMS.filter((it) => it.plano === plano);
-    drawPlantaCardCanvas(ctx, x, y, CARD_W, CARD_H, plano, items, PLANTA_PLANS.get(plano));
+    drawPlantaCardCanvas(ctx, x, y, CARD_W, CARD_H, plano, items, PLANTA_PLANS.get(plano), mode);
   });
 
   if (PLANTA_CHART_DATA) {
@@ -1151,25 +1170,27 @@ function downloadPlantaBlob(blob, name) {
 }
 
 function exportPlantaImagem() {
+  const mode = PLANTA_DIALOG_MODE;
   setPlanDialogStatus("Gerando imagem…");
-  const canvas = buildPlantaExportCanvas();
+  const canvas = buildPlantaExportCanvas(mode);
   canvas.toBlob((blob) => {
     if (!blob) { setPlanDialogStatus("Não foi possível gerar a imagem."); return; }
-    downloadPlantaBlob(blob, "planta-todos-os-planos.png");
+    downloadPlantaBlob(blob, `planta-${mode}-todos-os-planos.png`);
     setPlanDialogStatus("");
   }, "image/png");
 }
 
 async function exportPlantaPdf() {
+  const mode = PLANTA_DIALOG_MODE;
   setPlanDialogStatus("Gerando PDF…");
   try {
     const JsPDF = await loadJsPdf();
-    const canvas = buildPlantaExportCanvas();
+    const canvas = buildPlantaExportCanvas(mode);
     const W = canvas.width / 2;
     const H = canvas.height / 2;
     const pdf = new JsPDF({ orientation: W >= H ? "landscape" : "portrait", unit: "px", format: [W, H], compress: true });
     pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, W, H);
-    pdf.save("planta-todos-os-planos.pdf");
+    pdf.save(`planta-${mode}-todos-os-planos.pdf`);
     setPlanDialogStatus("");
   } catch (e) {
     console.warn("exportação em PDF falhou:", e);

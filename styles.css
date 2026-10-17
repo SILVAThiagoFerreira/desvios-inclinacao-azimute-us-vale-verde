@@ -852,7 +852,6 @@ body {
   border-radius: 50%;
 }
 .planta-legend__dot--ok { background: #2e8b57; }
-.planta-legend__dot--amber { background: #c47b00; }
 .planta-legend__dot--red { background: #e20613; }
 .planta-legend__dot--blue { background: #2563a8; }
 .planta-legend__ring {
@@ -881,7 +880,7 @@ body {
 .planta-map {
   display: block;
   width: 100%;
-  height: clamp(440px, 56vw, 680px);
+  height: clamp(360px, 40vw, 560px);
   background: #fbfbfc;
   border: 1px solid var(--rule);
   border-radius: var(--radius);
@@ -911,7 +910,8 @@ body {
 .planta-tooltip {
   position: absolute;
   z-index: 5;
-  max-width: 340px;
+  box-sizing: border-box;
+  max-width: min(340px, 100%);
   padding: 10px 12px;
   font-size: 12px;
   line-height: 1.4;
@@ -952,16 +952,6 @@ body {
 .chart-row.planta-charts { grid-template-columns: 1fr; }
 .planta-charts .chart-block__body--tall { min-height: 340px; }
 
-/* Lugar do mapa enquanto ele está aberto na janela ampliada */
-.planta-map-slot {
-  padding: 28px 12px;
-  font-size: 12px;
-  color: var(--muted);
-  text-align: center;
-  border: 1px dashed var(--rule);
-  border-radius: var(--radius);
-}
-.planta-map-slot[hidden] { display: none; }
 
 /* Janela ampliada da planta */
 .planta-dialog {
@@ -1001,30 +991,33 @@ body {
   flex-direction: column;
   padding: 12px 18px 16px;
 }
-.planta-dialog__body .planta-map-wrap {
-  flex: 1 1 auto;
-  min-height: 0;
+/* Os dois mapas (XY e Z) lado a lado; em tela estreita, um embaixo do outro */
+.planta-maps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.planta-map-block { min-width: 0; }
+.planta-map-block__head {
   display: flex;
-  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
 }
-.planta-dialog__body .planta-map-tools { flex: 0 0 auto; }
-.planta-dialog__body .planta-map {
-  flex: 1 1 auto;
-  height: auto;
-  min-height: 0;
+.planta-map-block__head h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--red);
 }
+.planta-map-block__sub { margin: 2px 0 0; font-size: 11.5px; color: var(--muted); }
 
-/* Dentro da janela ampliada o botão de abrir não aparece */
-.planta-dialog #planta-open-dialog { display: none; }
-
-/* Botão "Ver todos os planos" em destaque, no canto superior direito do bloco */
-#planta-card { position: relative; }
-#planta-card > .chart-block__head { padding-right: 200px; }
+/* Botão "Ver todos os planos" de cada eixo, ao lado do título do mapa */
 .planta-open-btn {
-  position: absolute;
-  top: 16px;
-  right: 18px;
-  z-index: 2;
+  flex: 0 0 auto;
   padding: 10px 18px;
   font-size: 13px;
   font-weight: 700;
@@ -1088,9 +1081,8 @@ body {
   user-select: none;
 }
 .planta-card__svg.is-dragging { cursor: grabbing; }
-@media (max-width: 560px) {
-  #planta-card > .chart-block__head { padding-right: 0; }
-  .planta-open-btn { position: static; margin: 0 0 12px; }
+@media (max-width: 980px) {
+  .planta-maps { grid-template-columns: 1fr; }
 }
 
 /* Barra de status: some quando tudo carregou (mensagem de sucesso removida) */
@@ -1142,6 +1134,7 @@ body {
   .planta-map-tools__hint { display: none; }
   .planta-legend { font-size: 11px; gap: 6px 12px; }
   .planta-open-btn { width: 100%; text-align: center; }
+  .planta-map-block__head { flex-direction: column; align-items: stretch; }
 }
 
 /* Celular: a janela "Ver todos os planos" ocupa a tela inteira */

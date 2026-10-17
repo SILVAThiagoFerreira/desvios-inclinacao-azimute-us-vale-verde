@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="./assets/enaex-favicon.png">
   <meta name="description" content="Análise de desvios de inclinação, azimute e profundidade dos furos de perfuração — US Vale Verde.">
   <link rel="preconnect" href="https://docs.google.com">
-  <link rel="stylesheet" href="./styles.css?v=25">
+  <link rel="stylesheet" href="./styles.css?v=26">
 </head>
 <body>
   <header class="topbar">
@@ -154,32 +154,68 @@
       </div>
 
       <div class="chart-block" id="planta-card">
-        <button id="planta-open-dialog" type="button" class="planta-open-btn">Ver todos os planos</button>
         <div class="chart-block__head">
           <p class="chart-block__eyebrow">COLLAR PREVISTO × REALIZADO</p>
           <h2>Aderência em planta</h2>
           <p id="planta-subtitle">Carregando tolerâncias…</p>
         </div>
         <div class="chart-block__body">
-          <div class="planta-legend" role="group" aria-label="Legenda da planta">
-            <span class="planta-legend__item"><span class="planta-legend__dot planta-legend__dot--ok"></span>Dentro nos dois eixos</span>
-            <span class="planta-legend__item"><span class="planta-legend__dot planta-legend__dot--amber"></span>Fora só em Z</span>
-            <span class="planta-legend__item"><span class="planta-legend__dot planta-legend__dot--red"></span>Fora em XY</span>
-            <span class="planta-legend__item"><span class="planta-legend__dot planta-legend__dot--blue"></span>Realizado sem previsto</span>
-            <span class="planta-legend__item"><span class="planta-legend__ring"></span>Collar previsto</span>
-            <span class="planta-legend__item"><span class="planta-legend__ring planta-legend__ring--dashed"></span>Previsto sem furo realizado</span>
-            <span class="planta-legend__item"><span class="planta-legend__link"></span>Ligação previsto × realizado</span>
-          </div>
           <p id="planta-status" class="map-status" aria-live="polite"></p>
-          <div class="planta-map-wrap">
-            <div class="planta-map-tools" role="group" aria-label="Controles do mapa de planta">
-              <button id="planta-zoom-in" type="button" class="filter-reset" aria-label="Aproximar">+</button>
-              <button id="planta-zoom-out" type="button" class="filter-reset" aria-label="Afastar">−</button>
-              <button id="planta-zoom-reset" type="button" class="filter-reset">Redefinir vista</button>
-              <span class="planta-map-tools__hint">Roda do mouse: zoom · arraste: mover · duplo clique: redefinir · passe o mouse sobre um furo para ver os detalhes</span>
-            </div>
-            <svg id="planta-map" class="planta-map" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Planta de todos os planos: collar previsto e realizado"></svg>
-            <div id="planta-tooltip" class="planta-tooltip" hidden></div>
+          <div class="planta-maps">
+            <section class="planta-map-block" aria-labelledby="planta-xy-title">
+              <div class="planta-map-block__head">
+                <div>
+                  <h3 id="planta-xy-title">Planta XY</h3>
+                  <p class="planta-map-block__sub">Distância em planta entre o collar previsto e o realizado (limite: 2 × diâmetro projetado)</p>
+                </div>
+                <button id="planta-open-xy" type="button" class="planta-open-btn">Ver todos os planos</button>
+              </div>
+              <div class="planta-legend" role="group" aria-label="Legenda da planta XY">
+                <span class="planta-legend__item"><span class="planta-legend__dot planta-legend__dot--ok"></span>Dentro da tolerância XY</span>
+                <span class="planta-legend__item"><span class="planta-legend__dot planta-legend__dot--red"></span>Fora da tolerância XY</span>
+                <span class="planta-legend__item"><span class="planta-legend__dot planta-legend__dot--blue"></span>Realizado sem previsto</span>
+                <span class="planta-legend__item"><span class="planta-legend__ring"></span>Collar previsto</span>
+                <span class="planta-legend__item"><span class="planta-legend__ring planta-legend__ring--dashed"></span>Previsto sem furo realizado</span>
+                <span class="planta-legend__item"><span class="planta-legend__link"></span>Ligação previsto × realizado</span>
+              </div>
+              <div class="planta-map-wrap">
+                <div class="planta-map-tools" role="group" aria-label="Controles da planta XY">
+                  <button id="planta-xy-zoom-in" type="button" class="filter-reset" aria-label="Aproximar">+</button>
+                  <button id="planta-xy-zoom-out" type="button" class="filter-reset" aria-label="Afastar">−</button>
+                  <button id="planta-xy-zoom-reset" type="button" class="filter-reset">Redefinir vista</button>
+                  <span class="planta-map-tools__hint">Roda do mouse: zoom · arraste: mover · duplo clique: redefinir · passe o mouse sobre um furo</span>
+                </div>
+                <svg id="planta-map-xy" class="planta-map" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Planta XY de todos os planos: collar previsto e realizado"></svg>
+                <div id="planta-tooltip-xy" class="planta-tooltip" hidden></div>
+              </div>
+            </section>
+            <section class="planta-map-block" aria-labelledby="planta-z-title">
+              <div class="planta-map-block__head">
+                <div>
+                  <h3 id="planta-z-title">Planta Z</h3>
+                  <p class="planta-map-block__sub">Diferença de cota entre o collar realizado e o previsto (limite: ±0,50 m)</p>
+                </div>
+                <button id="planta-open-z" type="button" class="planta-open-btn">Ver todos os planos</button>
+              </div>
+              <div class="planta-legend" role="group" aria-label="Legenda da planta Z">
+                <span class="planta-legend__item"><span class="planta-legend__dot planta-legend__dot--ok"></span>Dentro da tolerância Z</span>
+                <span class="planta-legend__item"><span class="planta-legend__dot planta-legend__dot--red"></span>Fora da tolerância Z</span>
+                <span class="planta-legend__item"><span class="planta-legend__dot planta-legend__dot--blue"></span>Realizado sem previsto</span>
+                <span class="planta-legend__item"><span class="planta-legend__ring"></span>Collar previsto</span>
+                <span class="planta-legend__item"><span class="planta-legend__ring planta-legend__ring--dashed"></span>Previsto sem furo realizado</span>
+                <span class="planta-legend__item"><span class="planta-legend__link"></span>Ligação previsto × realizado</span>
+              </div>
+              <div class="planta-map-wrap">
+                <div class="planta-map-tools" role="group" aria-label="Controles da planta Z">
+                  <button id="planta-z-zoom-in" type="button" class="filter-reset" aria-label="Aproximar">+</button>
+                  <button id="planta-z-zoom-out" type="button" class="filter-reset" aria-label="Afastar">−</button>
+                  <button id="planta-z-zoom-reset" type="button" class="filter-reset">Redefinir vista</button>
+                  <span class="planta-map-tools__hint">Roda do mouse: zoom · arraste: mover · duplo clique: redefinir · passe o mouse sobre um furo</span>
+                </div>
+                <svg id="planta-map-z" class="planta-map" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Planta Z de todos os planos: collar previsto e realizado"></svg>
+                <div id="planta-tooltip-z" class="planta-tooltip" hidden></div>
+              </div>
+            </section>
           </div>
         </div>
       </div>
@@ -330,7 +366,7 @@
       <div>
         <p class="chart-block__eyebrow">COLLAR PREVISTO × REALIZADO</p>
         <h2 id="planta-dialog-title">Aderência em planta · todos os planos</h2>
-        <p>Mesmo filtro da página. Role a janela para ver todos os planos. Em cada plano: Ctrl + roda do mouse para zoom, arraste para mover, duplo clique para redefinir.</p>
+        <p id="planta-dialog-sub">Mesmo filtro da página. Role a janela para ver todos os planos. Em cada plano: Ctrl + roda do mouse para zoom, arraste para mover, duplo clique para redefinir.</p>
       </div>
       <div class="planta-dialog__actions">
         <button id="planta-dialog-pdf" type="button" class="planta-dialog__btn">Exportar PDF</button>
@@ -353,7 +389,7 @@
     }
   </script>
   <script type="module" src="./map3d.js?v=12"></script>
-  <script src="./planta.js?v=8"></script>
+  <script src="./planta.js?v=10"></script>
   <script src="./app.js?v=22"></script>
   <script src="./excel-export-v2.js?v=5"></script>
 </body>
