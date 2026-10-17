@@ -559,16 +559,35 @@ function render() {
   drawByPlan(data);
   drawMap();
   drawPlanta();
-  drawHist("chart-hist-az", data.map((r) => r.azDelta).filter((v) => v != null), {
-    unit: "°", limit: LIMITS.azimuth, bins: 20,
-  });
-  drawHist("chart-hist-depth", data.map((r) => r.depthDelta).filter((v) => v != null), {
-    unit: " m", limit: LIMITS.depth, bins: 20, digits: 2,
-  });
-  drawHist("chart-hist-angle", data.map((r) => r.angle).filter((v) => v != null), {
-    unit: "°", bins: 18, symmetricLimits: false,
-    xMin: 0, xMax: 30, marks: [LIMITS.angleMin, LIMITS.angleMax],
-  });
+  const hs = histogramas(data);
+  drawHist("chart-hist-az", hs.az.valores, hs.az.opts);
+  drawHist("chart-hist-depth", hs.depth.valores, hs.depth.opts);
+  drawHist("chart-hist-angle", hs.angle.valores, hs.angle.opts);
+}
+
+/* Valores e opções dos três histogramas do painel (o relatório por plano usa os mesmos). */
+function histogramas(data) {
+  return {
+    az: {
+      valores: data.map((r) => r.azDelta).filter((v) => v != null),
+      opts: { unit: "°", limit: LIMITS.azimuth, bins: 20 },
+    },
+    depth: {
+      valores: data.map((r) => r.depthDelta).filter((v) => v != null),
+      opts: { unit: " m", limit: LIMITS.depth, bins: 20, digits: 2 },
+    },
+    angle: {
+      valores: data.map((r) => r.angle).filter((v) => v != null),
+      opts: { unit: "°", bins: 18, symmetricLimits: false, xMin: 0, xMax: 30, marks: [LIMITS.angleMin, LIMITS.angleMax] },
+    },
+  };
+}
+
+/* Alvo de desenho: canvas e chave próprios (relatório por plano) e resolução fixa.
+   Sem alvo, o gráfico vai para o canvas da página, como antes. */
+function aplicarAlvo(cfg, alvo) {
+  if (alvo && alvo.dpr) cfg.options.devicePixelRatio = alvo.dpr;
+  return cfg;
 }
 
 /* ===================== Charts ===================== */
@@ -721,15 +740,16 @@ function holeChartLabel(row) {
 }
 
 /* --- 1. Ângulo frontal por furo --- */
-function drawAngle(data) {
-  destroy("angle");
+function drawAngle(data, alvo = {}) {
+  const key = alvo.key || "angle";
+  destroy(key);
   const points = data.filter((r) => r.angle != null).map((r, index) => ({ x: index + 1, y: r.angle, plano: r.plano, id: r.id, label: holeChartLabel(r) }));
-  const ctx = document.getElementById("chart-angle");
+  const ctx = alvo.canvas || document.getElementById("chart-angle");
   const colored = points.map((p) => ({
     ...p,
     ok: p.y >= LIMITS.angleMin && p.y <= LIMITS.angleMax,
   }));
-  CHARTS.angle = new Chart(ctx, {
+  CHARTS[key] = new Chart(ctx, aplicarAlvo({
     type: "scatter",
     data: {
       datasets: [{
@@ -755,12 +775,13 @@ function drawAngle(data) {
       },
       scales: baseScales({ xTitle: "Ordem dos furos filtrados", yTitle: "Ângulo frontal [°]", yMin: 0, yMax: 30 }),
     },
-  });
+  }, alvo));
 }
 
 /* --- 2. Direção dos furos (ΔAz × ΔProf) --- */
-function drawDirection(data) {
-  destroy("direction");
+function drawDirection(data, alvo = {}) {
+  const key = alvo.key || "direction";
+  destroy(key);
   const pts = data
     .filter((r) => r.azDelta != null && r.depthDelta != null)
     .map((r) => ({ x: r.azDelta, y: r.depthDelta, id: r.id, plano: r.plano }));
@@ -768,7 +789,7 @@ function drawDirection(data) {
   const xExt = Math.max(45, ...pts.map((p) => Math.abs(p.x))) * 1.05;
   const yExt = Math.max(1.0, ...pts.map((p) => Math.abs(p.y))) * 1.15;
 
-  CHARTS.direction = new Chart(document.getElementById("chart-direction"), {
+  CHARTS[key] = new Chart(alvo.canvas || document.getElementById("chart-direction"), aplicarAlvo({
     type: "scatter",
     data: {
       datasets: [{
@@ -805,15 +826,16 @@ function drawDirection(data) {
         xMin: -xExt, xMax: xExt, yMin: -yExt, yMax: yExt,
       }),
     },
-  });
+  }, alvo));
 }
 
 /* --- 3. Δ Azimute por furo (barras coloridas) --- */
-function drawAzByHole(data) {
-  destroy("az");
+function drawAzByHole(data, alvo = {}) {
+  const key = alvo.key || "az";
+  destroy(key);
   const pts = data.filter((r) => r.azDelta != null);
   const labels = pts.map(holeChartLabel);
-  CHARTS.az = new Chart(document.getElementById("chart-az"), {
+  CHARTS[key] = new Chart(alvo.canvas || document.getElementById("chart-az"), aplicarAlvo({
     type: "bar",
     data: {
       labels,
@@ -846,15 +868,16 @@ function drawAzByHole(data) {
         },
       },
     },
-  });
+  }, alvo));
 }
 
 /* --- 4. Δ Profundidade por furo (barras coloridas) --- */
-function drawDepthByHole(data) {
-  destroy("depth");
+function drawDepthByHole(data, alvo = {}) {
+  const key = alvo.key || "depth";
+  destroy(key);
   const pts = data.filter((r) => r.depthDelta != null);
   const labels = pts.map(holeChartLabel);
-  CHARTS.depth = new Chart(document.getElementById("chart-depth"), {
+  CHARTS[key] = new Chart(alvo.canvas || document.getElementById("chart-depth"), aplicarAlvo({
     type: "bar",
     data: {
       labels,
@@ -887,12 +910,13 @@ function drawDepthByHole(data) {
         },
       },
     },
-  });
+  }, alvo));
 }
 
 /* --- 5. Aderência por plano (barras agrupadas) --- */
-function drawByPlan(data) {
-  destroy("byPlan");
+function drawByPlan(data, alvo = {}) {
+  const key = alvo.key || "byPlan";
+  destroy(key);
   const groups = {};
   (data || RECORDS).forEach((r) => {
     (groups[r.plano] ||= []).push(r);
@@ -905,7 +929,7 @@ function drawByPlan(data) {
     azPct.push(isFinite(m.azPct) ? m.azPct : null);
     zPct.push(isFinite(m.zPct) ? m.zPct : null);
   });
-  CHARTS.byPlan = new Chart(document.getElementById("chart-by-plan"), {
+  CHARTS[key] = new Chart(alvo.canvas || document.getElementById("chart-by-plan"), aplicarAlvo({
     type: "bar",
     data: {
       labels: planos,
@@ -944,17 +968,18 @@ function drawByPlan(data) {
         },
       },
     },
-  });
+  }, alvo));
 }
 
 /* --- Histograma genérico --- */
 function drawHist(canvasId, values, opts = {}) {
-  const key = canvasId;
+  const key = opts.key || canvasId;
+  const canvas = opts.canvas || document.getElementById(canvasId);
   destroy(key);
   if (!values.length) {
-    CHARTS[key] = new Chart(document.getElementById(canvasId), {
+    CHARTS[key] = new Chart(canvas, aplicarAlvo({
       type: "bar", data: { labels: [], datasets: [] }, options: { responsive: true, maintainAspectRatio: false },
-    });
+    }, opts));
     return;
   }
   const bins = opts.bins || 20;
@@ -992,7 +1017,7 @@ function drawHist(canvasId, values, opts = {}) {
   const unit = opts.unit || "";
   const marks = opts.marks || (opts.limit != null ? [-opts.limit, opts.limit] : []);
 
-  CHARTS[key] = new Chart(document.getElementById(canvasId), {
+  CHARTS[key] = new Chart(canvas, aplicarAlvo({
     type: "bar",
     data: {
       labels: labels.map((v) => fmtNum(v, digits)),
@@ -1029,7 +1054,7 @@ function drawHist(canvasId, values, opts = {}) {
         },
       },
     },
-  });
+  }, opts));
 }
 
 /* ===================== Exportação Excel ===================== */
@@ -1921,13 +1946,6 @@ async function drawMap() {
   status.classList.remove("is-visible");
   status.textContent = "";
 
-  // Bounding box conjugado
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  const pushPt = (p) => {
-    if (!isFinite(p.x) || !isFinite(p.y)) return;
-    if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
-    if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
-  };
   const visibleIdsByPlan = new Map();
   planos.forEach((plano) => {
     visibleIdsByPlan.set(
@@ -1942,19 +1960,45 @@ async function drawMap() {
     );
   });
 
-  withGeom.forEach(({ plano, holes }) => holes
-    .filter((h) => !h.id || visibleIdsByPlan.get(plano)?.has(String(Number(h.id))) || visibleIdsByPlan.get(plano)?.has(String(h.id)))
-    .forEach((h) => {
-    if (h.collar) pushPt(h.collar);
-    if (h.planned) h.planned.forEach(pushPt);
-    if (h.real) h.real.forEach(pushPt);
-  }));
-  if (!isFinite(minX) || !isFinite(maxY)) {
+  if (!desenharMapaSvg(svg, withGeom, visibleIdsByPlan, selected)) {
     status.classList.add("is-visible");
     status.textContent = "Geometria vazia para os DXFs encontrados.";
     publishMap3D([], null);
     return;
   }
+  publishMap3D(withGeom, visibleIdsByPlan);
+
+  if (missing.length) {
+    const note = missing.length > 4 ? `${missing.slice(0, 4).join(", ")}, +${missing.length - 4}` : missing.join(", ");
+    subtitle.textContent += ` · Sem DXF: ${note}.`;
+  }
+}
+
+/* Furo visível no filtro: sem ID entra sempre; com ID, o ID precisa estar no conjunto do plano. */
+function holeVisivel(plano, h, visibleIdsByPlan) {
+  const ids = visibleIdsByPlan.get(plano);
+  return !h.id || Boolean(ids && (ids.has(String(Number(h.id))) || ids.has(String(h.id))));
+}
+
+/* Mapa de execução (planejado em cinza, executado em vermelho e emboques) dentro de um SVG.
+   A página e o relatório por plano usam esta função. Devolve false quando não há geometria visível. */
+function desenharMapaSvg(svg, withGeom, visibleIdsByPlan, selected) {
+  svg.replaceChildren();
+  // Bounding box conjugado
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  const pushPt = (p) => {
+    if (!isFinite(p.x) || !isFinite(p.y)) return;
+    if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+  };
+  withGeom.forEach(({ plano, holes }) => holes
+    .filter((h) => holeVisivel(plano, h, visibleIdsByPlan))
+    .forEach((h) => {
+      if (h.collar) pushPt(h.collar);
+      if (h.planned) h.planned.forEach(pushPt);
+      if (h.real) h.real.forEach(pushPt);
+    }));
+  if (!isFinite(minX) || !isFinite(maxY)) return false;
 
   const width = 1200, height = 500, pad = 32;
   const rangeX = Math.max(maxX - minX, 1);
@@ -2001,29 +2045,29 @@ async function drawMap() {
 
   withGeom.forEach(({ plano, holes }) => {
     holes
-      .filter((h) => !h.id || visibleIdsByPlan.get(plano)?.has(String(Number(h.id))) || visibleIdsByPlan.get(plano)?.has(String(h.id)))
+      .filter((h) => holeVisivel(plano, h, visibleIdsByPlan))
       .forEach((h) => {
-      if (h.planned && h.planned.length >= 2) {
-        const [a, b] = h.planned;
-        const line = document.createElementNS(NS, "line");
-        line.setAttribute("x1", tx(a.x)); line.setAttribute("y1", ty(a.y));
-        line.setAttribute("x2", tx(b.x)); line.setAttribute("y2", ty(b.y));
-        plannedG.appendChild(line);
-      }
-      if (h.real && h.real.length >= 2) {
-        const pts = h.real.map((p) => `${tx(p.x)},${ty(p.y)}`).join(" ");
-        const pl = document.createElementNS(NS, "polyline");
-        pl.setAttribute("points", pts);
-        realG.appendChild(pl);
-      }
-      const c = h.collar || (h.planned && h.planned[0]) || (h.real && h.real[0]);
-      if (c && isFinite(c.x) && isFinite(c.y)) {
-        const dot = document.createElementNS(NS, "circle");
-        dot.setAttribute("cx", tx(c.x));
-        dot.setAttribute("cy", ty(c.y));
-        dot.setAttribute("r", selected ? 2.6 : 1.9);
-        collarG.appendChild(dot);
-      }
+        if (h.planned && h.planned.length >= 2) {
+          const [a, b] = h.planned;
+          const line = document.createElementNS(NS, "line");
+          line.setAttribute("x1", tx(a.x)); line.setAttribute("y1", ty(a.y));
+          line.setAttribute("x2", tx(b.x)); line.setAttribute("y2", ty(b.y));
+          plannedG.appendChild(line);
+        }
+        if (h.real && h.real.length >= 2) {
+          const pts = h.real.map((p) => `${tx(p.x)},${ty(p.y)}`).join(" ");
+          const pl = document.createElementNS(NS, "polyline");
+          pl.setAttribute("points", pts);
+          realG.appendChild(pl);
+        }
+        const c = h.collar || (h.planned && h.planned[0]) || (h.real && h.real[0]);
+        if (c && isFinite(c.x) && isFinite(c.y)) {
+          const dot = document.createElementNS(NS, "circle");
+          dot.setAttribute("cx", tx(c.x));
+          dot.setAttribute("cy", ty(c.y));
+          dot.setAttribute("r", selected ? 2.6 : 1.9);
+          collarG.appendChild(dot);
+        }
       });
   });
 
@@ -2031,12 +2075,7 @@ async function drawMap() {
   frag.appendChild(realG);
   frag.appendChild(collarG);
   svg.appendChild(frag);
-  publishMap3D(withGeom, visibleIdsByPlan);
-
-  if (missing.length) {
-    const note = missing.length > 4 ? `${missing.slice(0, 4).join(", ")}, +${missing.length - 4}` : missing.join(", ");
-    subtitle.textContent += ` · Sem DXF: ${note}.`;
-  }
+  return true;
 }
 
 function niceStep(raw) {

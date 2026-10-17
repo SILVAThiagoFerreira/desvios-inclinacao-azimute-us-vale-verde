@@ -953,10 +953,11 @@ body {
 .planta-charts .chart-block__body--tall { min-height: 340px; }
 
 
-/* Janela ampliada da planta */
+/* Janela ampliada da planta. Com zoom de TV (--page-zoom), o tamanho desconta o zoom
+   do html: vw/vh não são reduzidos por ele, então a janela ultrapassaria a tela. */
 .planta-dialog {
-  width: min(96vw, 1500px);
-  height: min(92vh, 900px);
+  width: min(calc(96vw / var(--page-zoom, 1)), 1500px);
+  height: min(calc(92vh / var(--page-zoom, 1)), 900px);
   max-width: none;
   max-height: none;
   padding: 0;
@@ -1197,7 +1198,7 @@ body {
 /* O html recebe zoom em telas grandes (regras no fim do arquivo); a altura da janela
    desconta esse zoom para caber na tela, já que vh não é reduzido pelo zoom. */
 .relatorio-dialog {
-  width: min(94vw, 1080px);
+  width: min(calc(94vw / var(--page-zoom, 1)), 1080px);
   height: min(calc(90vh / var(--page-zoom, 1)), 740px);
   max-width: none;
   max-height: none;

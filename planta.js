@@ -858,6 +858,39 @@ function plantaChartConfig(labels, values, furos) {
   };
 }
 
+/* Pareia os collares de um plano (previsto × realizado do DXF) e aplica o filtro de período.
+   Devolve null sem geometria. A página e o relatório por plano usam esta função. */
+function plantaParear(plano, holes, tf) {
+  if (!holes || !holes.length) return null;
+  const realized = [];
+  holes.forEach((h) => {
+    const c = h.collar || (h.real && h.real[0]);
+    if (!c || !isFinite(c.x) || !isFinite(c.y) || !isFinite(c.z)) return;
+    const num = Number(h.id);
+    const id = h.id ? (isFinite(num) ? String(num) : String(h.id).trim()) : null;
+    realized.push({ x: c.x, y: c.y, z: c.z, id });
+  });
+  const { matches, unmatchedR, unmatchedP } = matchPlanCollars(PLANEJADO.get(plano) || [], realized);
+  const ids = tf.active ? plantaVisibleIds(plano, tf) : null;
+  const visivel = (r) => !ids || !r.id || ids.has(r.id);
+  return {
+    plano,
+    matches: matches.filter((m) => visivel(m.r)),
+    unmatchedR: unmatchedR.filter(visivel),
+    unmatchedP: tf.active ? [] : unmatchedP,
+  };
+}
+
+/* Itens desenhados de um plano pareado: ligações previsto × realizado, realizados sem previsto e previstos sem furo. */
+function plantaItensDoPlano(p) {
+  const items = p.matches.map((m) => ({
+    kind: "match", plano: p.plano, id: m.r.id, p: m.p, r: m.r, dxy: m.dxy, dz: m.dz,
+  }));
+  p.unmatchedR.forEach((r) => items.push({ kind: "realized", plano: p.plano, id: r.id, r }));
+  p.unmatchedP.forEach((q) => items.push({ kind: "planned", plano: p.plano, p: q }));
+  return items;
+}
+
 /* ---------- Desenho do bloco ---------- */
 async function drawPlanta() {
   const charts = document.getElementById("planta-charts");
@@ -917,24 +950,9 @@ async function drawPlanta() {
   const planos = [];
   const semDxf = [];
   results.forEach(({ plano, holes }) => {
-    if (!holes || !holes.length) { semDxf.push(plano); return; }
-    const realized = [];
-    holes.forEach((h) => {
-      const c = h.collar || (h.real && h.real[0]);
-      if (!c || !isFinite(c.x) || !isFinite(c.y) || !isFinite(c.z)) return;
-      const num = Number(h.id);
-      const id = h.id ? (isFinite(num) ? String(num) : String(h.id).trim()) : null;
-      realized.push({ x: c.x, y: c.y, z: c.z, id });
-    });
-    const { matches, unmatchedR, unmatchedP } = matchPlanCollars(PLANEJADO.get(plano) || [], realized);
-    const ids = tf.active ? plantaVisibleIds(plano, tf) : null;
-    const visivel = (r) => !ids || !r.id || ids.has(r.id);
-    planos.push({
-      plano,
-      matches: matches.filter((m) => visivel(m.r)),
-      unmatchedR: unmatchedR.filter(visivel),
-      unmatchedP: tf.active ? [] : unmatchedP,
-    });
+    const p = plantaParear(plano, holes, tf);
+    if (p) planos.push(p);
+    else semDxf.push(plano);
   });
 
   if (!planos.length) {
@@ -946,16 +964,9 @@ async function drawPlanta() {
   }
 
   // Itens do filtro: cada collar previsto/realizado com o plano e a métrica
-  const items = [];
   PLANTA_PLANS = new Map();
-  planos.forEach((p) => {
-    PLANTA_PLANS.set(p.plano, plantaMetrics(p.matches));
-    p.matches.forEach((m) => items.push({
-      kind: "match", plano: p.plano, id: m.r.id, p: m.p, r: m.r, dxy: m.dxy, dz: m.dz,
-    }));
-    p.unmatchedR.forEach((r) => items.push({ kind: "realized", plano: p.plano, id: r.id, r }));
-    p.unmatchedP.forEach((q) => items.push({ kind: "planned", plano: p.plano, p: q }));
-  });
+  planos.forEach((p) => PLANTA_PLANS.set(p.plano, plantaMetrics(p.matches)));
+  const items = planos.flatMap(plantaItensDoPlano);
   PLANTA_ITEMS = items;
 
   const key = [selected, tf.y, tf.mo, planos.map((p) => p.plano).join(",")].join("|");

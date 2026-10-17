@@ -680,6 +680,45 @@ function main() {
     else applyView();
   }
 
+  // ---------- Imagem para o relatório por plano ----------
+  // Monta só os furos informados na vista em perspectiva, renderiza uma vez e devolve o PNG.
+  // Em seguida restaura a cena, a vista e as camadas da página, tudo na mesma tarefa
+  // (o navegador não chega a repintar a cena temporária).
+  function snapshot(holes, largura, altura) {
+    const salvo = {
+      holes: current,
+      hidden: [...hiddenKeys],
+      modo: viewMode,
+      pos: camera.position.clone(),
+      alvo: controls.target.clone(),
+    };
+    try {
+      hiddenKeys.clear();
+      viewMode = "persp";
+      build(holes);
+      // Camadas do relatório sempre ligadas, sem depender dos checkboxes da página
+      ["planned", "real", "collar", "grid"].forEach((k) => { layerGroups[k].visible = true; });
+      layerGroups.labels.visible = false;
+      if (collarMeshes.sphere) collarMeshes.sphere.visible = true;
+      if (collarMeshes.disc) collarMeshes.disc.visible = false;
+      renderer.setPixelRatio(2);
+      renderer.setSize(largura, altura, false);
+      camera.aspect = largura / altura;
+      camera.updateProjectionMatrix();
+      renderer.render(scene, camera);
+      return dom.toDataURL("image/png");
+    } finally {
+      viewMode = salvo.modo;
+      salvo.hidden.forEach((k) => hiddenKeys.add(k));
+      build(salvo.holes, { keepView: true });
+      camera.position.copy(salvo.pos);
+      controls.target.copy(salvo.alvo);
+      controls.update();
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      resize();
+    }
+  }
+
   const animate = () => {
     requestAnimationFrame(animate);
     controls.update();
@@ -708,6 +747,9 @@ function main() {
     current = window.__map3d;
     build(current);
   }
+
+  // Usado pelo relatório por plano (app.js/relatorio-plano.js)
+  window.map3dSnapshot = snapshot;
 }
 
 main();
