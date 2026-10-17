@@ -214,16 +214,14 @@ function relatorioCabecalho(ops, meta, titulo, sub) {
   });
 }
 
-/* Rótulo de gráfico ou tabela, com filete embaixo (como no modelo). Devolve a posição do conteúdo. */
+/* Rótulo de gráfico ou tabela (sem filete). Devolve a posição do conteúdo. */
 function relatorioRotulo(ops, x, y, w, texto) {
   ops.push({ t: "text", s: relatorioCortar(texto, 11, false, w), x, y, size: 11, c: RL.PRETO });
-  ops.push({ t: "line", x1: x, y1: y + 2.4, x2: x + w, y2: y + 2.4, c: RL.REGRA, lw: 0.2 });
   return y + 5.6;
 }
 
 /* Aviso em caixa cinza (quando um gráfico ou planta não pode ser desenhado). */
 function relatorioAviso(ops, x, y, w, h, texto) {
-  ops.push({ t: "rect", x, y, w, h, c: RL.ZEBRA });
   const linhas = relatorioQuebrar(texto, 9, w - 10);
   const lh = 9 * 0.3528 * 1.4;
   let yy = y + (h - linhas.length * lh) / 2 + 3;
@@ -255,8 +253,6 @@ function relatorioCartoes(ops, y, h, cartoes) {
   const cw = (LARGURA - gap * (cartoes.length - 1)) / cartoes.length;
   cartoes.forEach((cd, i) => {
     const x = M + i * (cw + gap);
-    ops.push({ t: "rect", x, y, w: cw, h, c: RL.ZEBRA });
-    ops.push({ t: "rect", x, y, w: cw, h: 1, c: cd.c });
     ops.push({ t: "text", s: relatorioCortar(cd.k, 9, false, cw - 8), x: x + 4, y: y + 7, size: 9, c: RL.TEXTO2 });
     ops.push({ t: "text", s: cd.v, x: x + 4, y: y + h - (cd.dica ? 9 : 6), size: 22, bold: true, c: cd.c });
     if (cd.dica) ops.push({ t: "text", s: relatorioCortar(cd.dica, 8, false, cw - 8), x: x + 4, y: y + h - 3.5, size: 8, c: RL.TEXTO2 });
@@ -278,12 +274,12 @@ function relatorioResumoTabela(ops, x, y, params, largura) {
     cx += pos.w;
     return pos;
   });
-  const cabH = 7, linhaH = 10;
+  const cabH = 8, linhaH = 11;
   colunas.forEach((c) => {
     const tx = c.al === "left" ? c.x + 2 : c.x + c.w / 2;
-    ops.push({ t: "text", s: c.t, x: tx, y: y + 4.8, size: 8.5, bold: true, c: RL.PRETO, align: c.al });
+    ops.push({ t: "text", s: c.t, x: tx, y: y + 5.2, size: 8, bold: true, c: RL.CINZA, align: c.al });
   });
-  ops.push({ t: "line", x1: x, y1: y + cabH, x2: x + largura, y2: y + cabH, c: RL.PRETO, lw: 0.35 });
+  ops.push({ t: "line", x1: x, y1: y + cabH, x2: x + largura, y2: y + cabH, c: RL.REGRA, lw: 0.25 });
   let yy = y + cabH;
   params.forEach((p) => {
     const fora = p.total != null && p.ok != null ? p.total - p.ok : null;
@@ -302,10 +298,9 @@ function relatorioResumoTabela(ops, x, y, params, largura) {
       const tx = c.al === "left" ? c.x + 2 : c.x + c.w / 2;
       ops.push({
         t: "text", s: relatorioCortar(valores[j], 9.5, destaque || j === 0, c.w - 4),
-        x: tx, y: yy + 6.8, size: 9.5, bold: destaque || j === 0, c: cor, align: c.al,
+        x: tx, y: yy + 7.4, size: 9.5, bold: destaque || j === 0, c: cor, align: c.al,
       });
     });
-    ops.push({ t: "line", x1: x, y1: yy + linhaH, x2: x + largura, y2: yy + linhaH, c: RL.REGRA, lw: 0.2 });
     yy += linhaH;
   });
   return yy;
@@ -327,7 +322,7 @@ function relatorioCabecalhoTabela(ops, y) {
     const c = cols[i];
     if (!c.grupo) {
       const esquerda = c.align === "left";
-      ops.push({ t: "text", s: c.titulo, x: esquerda ? c.x + 1.8 : c.x + c.w / 2, y: y + altura - 1.8, size: 7.5, bold: true, c: RL.PRETO, align: esquerda ? "left" : "center" });
+      ops.push({ t: "text", s: c.titulo, x: esquerda ? c.x + 1.8 : c.x + c.w / 2, y: y + altura - 1.8, size: 7.5, bold: true, c: RL.CINZA, align: esquerda ? "left" : "center" });
       i += 1;
       continue;
     }
@@ -336,15 +331,14 @@ function relatorioCabecalhoTabela(ops, y) {
     const ultimo = cols[j - 1];
     const gx = c.x;
     const gw = ultimo.x + ultimo.w - c.x;
-    ops.push({ t: "text", s: c.grupo, x: gx + gw / 2, y: y + 4.3, size: 7.5, bold: true, c: RL.PRETO, align: "center" });
-    ops.push({ t: "line", x1: gx + 1, y1: y + RL.GRUPO_H, x2: gx + gw - 1, y2: y + RL.GRUPO_H, c: RL.CINZA, lw: 0.2 });
+    ops.push({ t: "text", s: c.grupo, x: gx + gw / 2, y: y + 4.3, size: 7.5, bold: true, c: RL.CINZA, align: "center" });
     for (let k = i; k < j; k += 1) {
       const ck = cols[k];
-      ops.push({ t: "text", s: ck.titulo, x: ck.x + ck.w / 2, y: y + altura - 1.8, size: 7, c: RL.TEXTO2, align: "center" });
+      ops.push({ t: "text", s: ck.titulo, x: ck.x + ck.w / 2, y: y + altura - 1.8, size: 7, c: RL.CINZA, align: "center" });
     }
     i = j;
   }
-  ops.push({ t: "line", x1: RL.M, y1: y + altura, x2: RL.M + RL.LARGURA, y2: y + altura, c: RL.PRETO, lw: 0.35 });
+  ops.push({ t: "line", x1: RL.M, y1: y + altura, x2: RL.M + RL.LARGURA, y2: y + altura, c: RL.REGRA, lw: 0.25 });
   return y + altura;
 }
 
@@ -361,7 +355,6 @@ function relatorioLinhaTabela(ops, y, valores, fora, colunas) {
       bold: marcada, c: marcada ? RL.VERMELHO : RL.PRETO, align: c.align,
     });
   });
-  ops.push({ t: "line", x1: RL.M, y1: y + h, x2: RL.M + RL.LARGURA, y2: y + h, c: RL.REGRA, lw: 0.15 });
 }
 
 /* ---------- Indicadores do plano ---------- */
@@ -506,7 +499,7 @@ function relatorioPaginasTabela(ctx, nova) {
   }
   res.desvios.forEach(({ r, fora }) => {
     if (y + RL.LINHA > RL.LIMITE) {
-      ops = nova("FUROS FORA DA TOLERÂNCIA (continuação)", sub);
+      ops = nova("FUROS FORA DA TOLERÂNCIA", sub);
       y = relatorioCabecalhoTabela(ops, RL.TOPO);
     }
     relatorioLinhaTabela(ops, y, relatorioLinha(r, fora), fora, colunas);
@@ -524,10 +517,9 @@ function relatorioMontar(meta, res, d) {
     relatorioCabecalho(ops, meta, titulo, sub);
     return ops;
   };
-  const planoPeriodo = `Plano ${meta.plano} · ${meta.periodo}`;
-  relatorioPaginaConsolidado(nova("DESVIOS DE PERFURAÇÃO", `${planoPeriodo} · Gerado em ${meta.geradoEm}`), ctx);
+  relatorioPaginaConsolidado(nova("DESVIOS DE PERFURAÇÃO", meta.plano), ctx);
   relatorioPaginaMapa(nova("MAPA DE EXECUÇÃO", "Planejado × executado, com o emboque de cada furo do período"), ctx);
-  relatorioPaginaMapa3d(nova("MAPA 3D DE EXECUÇÃO", planoPeriodo), ctx);
+  relatorioPaginaMapa3d(nova("MAPA 3D DE EXECUÇÃO", meta.plano), ctx);
   relatorioPaginaPlantas(nova("ADERÊNCIA EM PLANTA", "Collar previsto × realizado, em planta (XY) e em cota (Z)"), ctx);
   relatorioPaginaAngulo(nova("ÂNGULO FRONTAL E DIREÇÃO", "Inclinação executada de cada furo e posição em relação ao previsto"), ctx);
   relatorioPaginaDesvios(nova("AZIMUTE E PROFUNDIDADE POR FURO", "Desvio executado menos previsto, em cada furo do período"), ctx);
