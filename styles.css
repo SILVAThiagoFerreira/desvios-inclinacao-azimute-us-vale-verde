@@ -866,7 +866,7 @@ body {
 .planta-legend__link {
   display: inline-block;
   width: 18px;
-  border-top: 1px solid #b9c0c6;
+  border-top: 1.3px solid #8a939b;
 }
 .planta-map-wrap { position: relative; }
 .planta-map-tools {
@@ -898,7 +898,7 @@ body {
   vector-effect: non-scaling-stroke;
 }
 .planta-ring--dashed { stroke-dasharray: 3 3; }
-.planta-link { vector-effect: non-scaling-stroke; stroke-width: 1px; }
+.planta-link { vector-effect: non-scaling-stroke; stroke-width: 1.3px; }
 .planta-dot {
   stroke: #ffffff;
   stroke-width: 0.6px;

@@ -39,7 +39,7 @@ const PLANTA_COLORS = {
   blue: "#2563a8",    // realizado sem previsto correspondente
   planned: "#7b858d", // collar previsto
   na: "#7b858d",      // furo sem registro de profundidade no período (não entra no Z)
-  link: "#b9c0c6",    // linha entre previsto e realizado
+  link: "#8a939b",    // linha entre previsto e realizado
 };
 // Eixos da planta: XY e Z (desvio em planta e de profundidade) e os dois parâmetros
 // de conformidade do site, inclinação (faixa do ângulo frontal) e azimute (±LIMITS.azimuth).
@@ -300,6 +300,57 @@ function placePlantaTip(tip, wrap, e) {
   tip.style.top = `${Math.min(Math.max(0, top), Math.max(0, box.height - th))}px`;
 }
 
+/* ---------- Enquadramento: rotação rígida para a faixa de furos ocupar o quadro ---------- */
+/* Gira a nuvem de collares em torno do centro, com rotação rígida (mesma escala em X e Y,
+   então o deslocamento previsto × realizado continua honesto). O eixo principal da faixa de
+   furos (PCA dos collares) vai para a horizontal, para a faixa ocupar a largura do quadro. */
+function plantaRot(q, rot) {
+  const dx = q.x - rot.cx;
+  const dy = q.y - rot.cy;
+  return { x: dx * rot.c - dy * rot.s, y: dx * rot.s + dy * rot.c };
+}
+
+function plantaFrame(pontos) {
+  if (!pontos.length) return { rot: { c: 1, s: 0, cx: 0, cy: 0 }, origin: { x: 0, y: 0 }, bounds: { w: 1, h: 1 } };
+  let cx = 0, cy = 0;
+  pontos.forEach((q) => { cx += q.x; cy += q.y; });
+  cx /= pontos.length;
+  cy /= pontos.length;
+  let sxx = 0, syy = 0, sxy = 0;
+  pontos.forEach((q) => {
+    const dx = q.x - cx;
+    const dy = q.y - cy;
+    sxx += dx * dx;
+    syy += dy * dy;
+    sxy += dx * dy;
+  });
+  const eixo = 0.5 * Math.atan2(2 * sxy, sxx - syy); // direção do eixo principal
+  const rot = { c: Math.cos(-eixo), s: Math.sin(-eixo), cx, cy };
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  pontos.forEach((q) => {
+    const r = plantaRot(q, rot);
+    if (r.x < minX) minX = r.x;
+    if (r.x > maxX) maxX = r.x;
+    if (r.y < minY) minY = r.y;
+    if (r.y > maxY) maxY = r.y;
+  });
+  return {
+    rot,
+    origin: { x: minX, y: maxY },
+    bounds: { w: Math.max(maxX - minX, 1), h: Math.max(maxY - minY, 1) },
+  };
+}
+
+/* Collares previsto e realizado de uma lista de itens (para o enquadramento). */
+function plantaPontos(items) {
+  const pts = [];
+  items.forEach((it) => {
+    if (it.p) pts.push(it.p);
+    if (it.r) pts.push(it.r);
+  });
+  return pts;
+}
+
 /* ---------- Mapa em planta de um eixo: zoom, arraste e tooltip ---------- */
 class PlantaMap {
   constructor(svg, tip, mode) {
@@ -311,6 +362,7 @@ class PlantaMap {
     this.view = null;                 // { x, y, w, h } da viewBox, em metros locais
     this.bounds = { w: 1, h: 1 };
     this.key = "";                    // chave do filtro; muda → refaz o enquadramento
+    this.rot = null;                  // rotação da vista (ver plantaFrame)
     this.origin = { x: 0, y: 0 };
     this.sized = [];                  // [{ el, px }] marcadores com raio em pixels
     this.items = [];                  // itens indexados por data-idx
@@ -443,22 +495,16 @@ class PlantaMap {
       this.svg.setAttribute("viewBox", "0 0 600 380");
       return;
     }
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    const pushPt = (q) => {
-      if (q.x < minX) minX = q.x;
-      if (q.x > maxX) maxX = q.x;
-      if (q.y < minY) minY = q.y;
-      if (q.y > maxY) maxY = q.y;
-    };
-    items.forEach((it) => { if (it.p) pushPt(it.p); if (it.r) pushPt(it.r); });
-    // A origem só muda quando o filtro muda; assim a vista não salta no auto-refresh.
+    // A origem e a rotação só mudam quando o filtro muda; assim a vista não salta no auto-refresh.
     if (key !== this.key || !this.view) {
       this.key = key;
-      this.origin = { x: minX, y: maxY };
-      this.bounds = { w: maxX - minX, h: maxY - minY };
+      const f = plantaFrame(plantaPontos(items));
+      this.rot = f.rot;
+      this.origin = f.origin;
+      this.bounds = f.bounds;
       this.fit();
     }
-    plantaDrawItems(this.content, items, this.origin, this.sized, this.mode);
+    plantaDrawItems(this.content, items, this.origin, this.sized, this.mode, this.rot);
     this.apply();
   }
 }
@@ -546,9 +592,10 @@ function buildPlantaTooltip(tip, item, mode) {
 }
 
 /* Desenho dos furos (ligações, previstos e realizados) colorido pelo eixo "mode". */
-function plantaDrawItems(content, items, origin, sized, mode) {
-  const lx = (q) => q.x - origin.x;
-  const ly = (q) => origin.y - q.y;
+function plantaDrawItems(content, items, origin, sized, mode, rot) {
+  const R = (q) => (rot ? plantaRot(q, rot) : q);
+  const lx = (q) => R(q).x - origin.x;
+  const ly = (q) => origin.y - R(q).y;
   const links = plantaEl("g", { class: "planta-links" }, content);
   const planned = plantaEl("g", { class: "planta-planned" }, content);
   const real = plantaEl("g", { class: "planta-real" }, content);
@@ -558,14 +605,14 @@ function plantaDrawItems(content, items, origin, sized, mode) {
       class: "planta-ring" + (dashed ? " planta-ring--dashed" : ""),
       "data-idx": idx,
     }, planned);
-    sized.push({ el, px: 4.2 });
+    sized.push({ el, px: 3.6 });
   };
   const dot = (q, color, idx) => {
     const el = plantaEl("circle", {
       cx: lx(q), cy: ly(q), r: 1, fill: color,
       class: "planta-dot", "data-idx": idx,
     }, real);
-    sized.push({ el, px: 3.4 });
+    sized.push({ el, px: 2.8 });
   };
   items.forEach((it, idx) => {
     if (it.kind === "match") {
@@ -638,18 +685,17 @@ function buildPlantaCard(plano, items, mode) {
     const t = plantaEl("text", { x: 300, y: 190, "text-anchor": "middle", class: "planta-svg__empty" }, svg);
     t.textContent = "Sem furos no filtro atual";
     svg.setAttribute("viewBox", "0 0 600 380");
-  } else {
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    const pushPt = (q) => {
-      if (q.x < minX) minX = q.x;
-      if (q.x > maxX) maxX = q.x;
-      if (q.y < minY) minY = q.y;
-      if (q.y > maxY) maxY = q.y;
-    };
-    items.forEach((it) => { if (it.p) pushPt(it.p); if (it.r) pushPt(it.r); });
-    bounds = { w: Math.max(maxX - minX, 1), h: Math.max(maxY - minY, 1) };
-    plantaDrawItems(content, items, { x: minX, y: maxY }, sized, mode);
   }
+
+  // Desenha os furos com o enquadramento (rotação e escala) para a proporção atual do card
+  const build = () => {
+    if (!items.length) return;
+    content.replaceChildren();
+    sized.length = 0;
+    const f = plantaFrame(plantaPontos(items));
+    bounds = f.bounds;
+    plantaDrawItems(content, items, f.origin, sized, mode, f.rot);
+  };
 
   const scale = () => {
     const r = svg.getBoundingClientRect();
@@ -749,9 +795,10 @@ function buildPlantaCard(plano, items, mode) {
   bOut.addEventListener("click", () => zoomAt(1.25));
   bReset.addEventListener("click", fit);
 
+  build();
   PLANTA_CARDS.push({ apply: () => apply() });
-  // o enquadramento inicial acontece quando o card já está no layout
-  requestAnimationFrame(() => { fit(); });
+  // o enquadramento inicial acontece quando o card já está no layout (proporção real do quadro)
+  requestAnimationFrame(() => { build(); fit(); });
   return card;
 }
 
@@ -1031,7 +1078,7 @@ async function drawPlanta() {
   const azLimite = document.getElementById("planta-az-limite");
   if (azLimite) azLimite.textContent = `±${fmtNum(LIMITS.azimuth, 2)}°`;
   if (subtitle) {
-    subtitle.textContent = `Quatro mapas do mesmo filtro · cada collar previsto é pareado ao realizado mais próximo (até ${fmtNum(COLLAR_MATCH_MAX, 1)} m).`;
+    subtitle.textContent = `Quatro mapas do mesmo filtro · cada collar previsto é pareado ao realizado mais próximo (até ${fmtNum(COLLAR_MATCH_MAX, 1)} m). Vista girada para a faixa de furos ocupar o quadro, com escala igual em X e Y (o norte não fica para cima).`;
   }
   setupPlantaMap();
 
@@ -1163,7 +1210,6 @@ function plantaExportSubtitle() {
 
 function drawPlantaCardCanvas(ctx, x, y, w, h, plano, items, m, mode) {
   const HEAD_H = 40;
-  const COLLAR_VECTOR_MAGNIFICATION = 8;
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(x, y, w, h);
   ctx.strokeStyle = "#e6e8ea";
@@ -1179,9 +1225,6 @@ function drawPlantaCardCanvas(ctx, x, y, w, h, plano, items, m, mode) {
   ctx.font = "11.5px Arial";
   ctx.textAlign = "right";
   ctx.fillText(plantaResumoEixo(m, mode), x + w - 14, y + HEAD_H / 2);
-  ctx.font = "9px Arial";
-  ctx.textAlign = "center";
-  ctx.fillText(`Vetor ×${COLLAR_VECTOR_MAGNIFICATION} · collars em posição real`, x + w / 2, y + HEAD_H / 2);
   ctx.textAlign = "left";
   ctx.textBaseline = "alphabetic";
 
@@ -1196,32 +1239,20 @@ function drawPlantaCardCanvas(ctx, x, y, w, h, plano, items, m, mode) {
     ctx.textAlign = "left";
     return;
   }
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  const pushPt = (q) => {
-    if (q.x < minX) minX = q.x;
-    if (q.x > maxX) maxX = q.x;
-    if (q.y < minY) minY = q.y;
-    if (q.y > maxY) maxY = q.y;
-  };
-  items.forEach((it) => {
-    if (it.p) pushPt(it.p);
-    if (it.r) pushPt(it.r);
-    if (it.kind === "match") {
-      pushPt({
-        x: it.p.x + (it.r.x - it.p.x) * COLLAR_VECTOR_MAGNIFICATION,
-        y: it.p.y + (it.r.y - it.p.y) * COLLAR_VECTOR_MAGNIFICATION,
-      });
-    }
-  });
   const pad = 12;
-  const rangeX = Math.max(maxX - minX, 1);
-  const rangeY = Math.max(maxY - minY, 1);
+  const frame = plantaFrame(plantaPontos(items));
+  const { rot } = frame;
+  const minX = frame.origin.x;
+  const maxY = frame.origin.y;
+  const rangeX = frame.bounds.w;
+  const rangeY = frame.bounds.h;
   const s = Math.min((mw - pad * 2) / rangeX, (mh - pad * 2) / rangeY);
   const ox = mx + (mw - rangeX * s) / 2;
   const oy = my + (mh - rangeY * s) / 2;
-  const tx = (q) => ox + (q.x - minX) * s;
-  const ty = (q) => oy + (maxY - q.y) * s;
+  const tx = (q) => ox + (plantaRot(q, rot).x - minX) * s;
+  const ty = (q) => oy + (maxY - plantaRot(q, rot).y) * s;
 
+  // Ligação previsto × realizado (sem setas): o deslocamento aparece no comprimento da linha
   ctx.strokeStyle = "#46515a";
   ctx.lineWidth = 1.2;
   items.forEach((it) => {
@@ -1229,30 +1260,6 @@ function drawPlantaCardCanvas(ctx, x, y, w, h, plano, items, m, mode) {
     ctx.beginPath();
     ctx.moveTo(tx(it.p), ty(it.p));
     ctx.lineTo(tx(it.r), ty(it.r));
-    ctx.stroke();
-
-    // Mostra o deslocamento com um vetor ampliado, mantendo o collar realizado
-    // no ponto verdadeiro. A ampliação é apenas gráfica e fica identificada no cartão.
-    const vx = (it.r.x - it.p.x) * s * (COLLAR_VECTOR_MAGNIFICATION - 1);
-    const vy = -(it.r.y - it.p.y) * s * (COLLAR_VECTOR_MAGNIFICATION - 1);
-    if (Math.hypot(vx, vy) < 3) return;
-    const x1 = tx(it.r), y1 = ty(it.r);
-    const x2 = x1 + vx, y2 = y1 + vy;
-    const angle = Math.atan2(vy, vx);
-    const head = 3.2;
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.strokeStyle = "#46515a";
-    ctx.lineWidth = 1.15;
-    ctx.setLineDash([4, 2]);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.beginPath();
-    ctx.moveTo(x2, y2);
-    ctx.lineTo(x2 - head * Math.cos(angle - Math.PI / 6), y2 - head * Math.sin(angle - Math.PI / 6));
-    ctx.moveTo(x2, y2);
-    ctx.lineTo(x2 - head * Math.cos(angle + Math.PI / 6), y2 - head * Math.sin(angle + Math.PI / 6));
     ctx.stroke();
   });
   items.forEach((it) => {
