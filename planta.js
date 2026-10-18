@@ -1163,6 +1163,7 @@ function plantaExportSubtitle() {
 
 function drawPlantaCardCanvas(ctx, x, y, w, h, plano, items, m, mode) {
   const HEAD_H = 40;
+  const COLLAR_VECTOR_MAGNIFICATION = 8;
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(x, y, w, h);
   ctx.strokeStyle = "#e6e8ea";
@@ -1178,6 +1179,9 @@ function drawPlantaCardCanvas(ctx, x, y, w, h, plano, items, m, mode) {
   ctx.font = "11.5px Arial";
   ctx.textAlign = "right";
   ctx.fillText(plantaResumoEixo(m, mode), x + w - 14, y + HEAD_H / 2);
+  ctx.font = "9px Arial";
+  ctx.textAlign = "center";
+  ctx.fillText(`Vetor ×${COLLAR_VECTOR_MAGNIFICATION} · collars em posição real`, x + w / 2, y + HEAD_H / 2);
   ctx.textAlign = "left";
   ctx.textBaseline = "alphabetic";
 
@@ -1199,8 +1203,17 @@ function drawPlantaCardCanvas(ctx, x, y, w, h, plano, items, m, mode) {
     if (q.y < minY) minY = q.y;
     if (q.y > maxY) maxY = q.y;
   };
-  items.forEach((it) => { if (it.p) pushPt(it.p); if (it.r) pushPt(it.r); });
-  const pad = 28;
+  items.forEach((it) => {
+    if (it.p) pushPt(it.p);
+    if (it.r) pushPt(it.r);
+    if (it.kind === "match") {
+      pushPt({
+        x: it.p.x + (it.r.x - it.p.x) * COLLAR_VECTOR_MAGNIFICATION,
+        y: it.p.y + (it.r.y - it.p.y) * COLLAR_VECTOR_MAGNIFICATION,
+      });
+    }
+  });
+  const pad = 12;
   const rangeX = Math.max(maxX - minX, 1);
   const rangeY = Math.max(maxY - minY, 1);
   const s = Math.min((mw - pad * 2) / rangeX, (mh - pad * 2) / rangeY);
@@ -1209,13 +1222,37 @@ function drawPlantaCardCanvas(ctx, x, y, w, h, plano, items, m, mode) {
   const tx = (q) => ox + (q.x - minX) * s;
   const ty = (q) => oy + (maxY - q.y) * s;
 
-  ctx.strokeStyle = PLANTA_COLORS.link;
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = "#46515a";
+  ctx.lineWidth = 1.2;
   items.forEach((it) => {
     if (it.kind !== "match") return;
     ctx.beginPath();
     ctx.moveTo(tx(it.p), ty(it.p));
     ctx.lineTo(tx(it.r), ty(it.r));
+    ctx.stroke();
+
+    // Mostra o deslocamento com um vetor ampliado, mantendo o collar realizado
+    // no ponto verdadeiro. A ampliação é apenas gráfica e fica identificada no cartão.
+    const vx = (it.r.x - it.p.x) * s * (COLLAR_VECTOR_MAGNIFICATION - 1);
+    const vy = -(it.r.y - it.p.y) * s * (COLLAR_VECTOR_MAGNIFICATION - 1);
+    if (Math.hypot(vx, vy) < 3) return;
+    const x1 = tx(it.r), y1 = ty(it.r);
+    const x2 = x1 + vx, y2 = y1 + vy;
+    const angle = Math.atan2(vy, vx);
+    const head = 3.2;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.strokeStyle = "#46515a";
+    ctx.lineWidth = 1.15;
+    ctx.setLineDash([4, 2]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - head * Math.cos(angle - Math.PI / 6), y2 - head * Math.sin(angle - Math.PI / 6));
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - head * Math.cos(angle + Math.PI / 6), y2 - head * Math.sin(angle + Math.PI / 6));
     ctx.stroke();
   });
   items.forEach((it) => {

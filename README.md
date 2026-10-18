@@ -85,6 +85,16 @@ O bloco "Aderência em planta" compara, em cada plano, o collar previsto com o c
   Uma linha por furo previsto. `PLANO` deve ser igual ao nome-base do DXF (`PC-22` para
   `PC-22.dxf`). Coordenadas no mesmo sistema e unidade (metros) dos DXF. A planilha precisa
   estar com acesso "Qualquer pessoa com o link", como a planilha principal.
+- **Filtro obrigatório de correspondência:** antes de importar coordenadas para
+  `PLANEJADO`, mantenha somente furos com correspondência única no DXF. Use o
+  identificador do texto da camada `Number` associado ao ponto da camada `Hole`
+  junto com a proximidade XY (até 2,0 m); não associe pelo número isolado, pois
+  IDs podem se repetir entre projetos de origem. Remova linhas planejadas sem
+  correspondência única para que elas não sejam desenhadas como anéis isolados.
+- **PC651026 (18/10/2026):** a planilha foi reduzida de 508 para 124 furos
+  correspondentes ao DXF, após verificação por ID e XY. O conjunto filtrado está
+  em `data/PC651026-planejado-correspondente.tsv`; os registros detalhados da
+  auditoria permanecem locais.
 - **Realizado:** ponto do layer `Hole` de cada DXF do plano (mesma fonte do mapa).
 - **Pareamento:** cada collar previsto é ligado ao realizado mais próximo em planta, um para
 - **XY sem dado confiável:** se 95% ou mais dos collares pareados coincidem com o previsto (menos de 1 mm), o ponto `Hole` do DXF repete o previsto e o XY do plano não mede desvio. Nesse caso o XY fica como "sem dado confiável" (cinza no mapa, sem barra no gráfico, "—" no relatório), em vez de 100%.
