@@ -210,13 +210,19 @@ function relatorioTexto(ops, x, y, w, texto, size, cor, bold = false) {
 /* Cabeçalho da lâmina, como no modelo: título e subtítulo à esquerda, logos à direita. */
 function relatorioCabecalho(ops, meta, titulo, sub) {
   const { M, W, LARGURA } = RL;
-  ops.push({ t: "text", s: relatorioCortar(titulo, 20, false, LARGURA - 90), x: M, y: 20, size: 20, c: RL.TITULO });
-  if (sub) ops.push({ t: "text", s: relatorioCortar(sub, 10, false, LARGURA), x: M, y: 27, size: 10, c: RL.TEXTO2 });
   const logos = meta.logos || {};
+  // Logos à direita: a largura ocupada por eles limita o espaço do título.
+  const logosLista = [logos.cliente, logos.enaex].filter(Boolean);
+  const h = 12;
+  const larguraLogos = logosLista.reduce((soma, logo) => soma + h * logo.ratio + 8, 0);
+  const disponivel = LARGURA - larguraLogos - 8;
+  // Reduz a fonte do título só se ele não couber ao lado dos logos (mínimo 14 pt).
+  let tamanho = 20;
+  while (tamanho > 14 && relatorioMedir(titulo, tamanho, false) > disponivel) tamanho -= 1;
+  ops.push({ t: "text", s: relatorioCortar(titulo, tamanho, false, disponivel), x: M, y: 20, size: tamanho, c: RL.TITULO });
+  if (sub) ops.push({ t: "text", s: relatorioCortar(sub, 10, false, LARGURA), x: M, y: 27, size: 10, c: RL.TEXTO2 });
   let x = W - M;
-  [logos.cliente, logos.enaex].forEach((logo) => {
-    if (!logo) return;
-    const h = 12;
+  logosLista.forEach((logo) => {
     const w = h * logo.ratio;
     x -= w;
     ops.push({ t: "img", x, y: 9, w, h, logo });
@@ -579,7 +585,7 @@ function relatorioMontar(meta, res, d) {
     relatorioCabecalho(ops, meta, titulo, sub);
     return ops;
   };
-  relatorioPaginaConsolidado(nova("DESVIOS DE PERFURAÇÃO", meta.plano), ctx);
+  relatorioPaginaConsolidado(nova(`DESVIOS DE PERFURAÇÃO - ${meta.plano}`, meta.plano), ctx);
   relatorioPaginaMapa(nova("MAPA DE EXECUÇÃO", "Planejado × executado, com o emboque de cada furo do período"), ctx);
   relatorioPaginaMapa3d(nova("MAPA 3D DE EXECUÇÃO", meta.plano), ctx);
   relatorioPaginaPlantas(nova("ADERÊNCIA EM PLANTA", "Collar previsto × realizado em planta (XY) e desvio de profundidade por furo (Z)"), ctx);
@@ -1192,4 +1198,11 @@ function setupRelatorio() {
   document.querySelectorAll('input[name="relatorio-format"]').forEach((r) =>
     r.addEventListener("change", atualizarRelatorioBotao));
   dlg.addEventListener("close", () => mostrarRelatorioStatus(""));
+  // Clique no fundo (fora da caixa da janela) fecha; Esc já fecha pelo próprio <dialog>.
+  dlg.addEventListener("click", (e) => {
+    if (e.target !== dlg) return;
+    const r = dlg.getBoundingClientRect();
+    const dentro = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+    if (!dentro) dlg.close();
+  });
 }
