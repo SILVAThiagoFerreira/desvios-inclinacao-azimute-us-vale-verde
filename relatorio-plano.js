@@ -5,8 +5,8 @@
    mapas, indicadores e tabela). Lâminas:
      1. Consolidado: indicadores de furos e conformidade por parâmetro
      2. Mapa de execução (planejado × executado)
-     3. Mapa 3D de execução
-     4. Aderência em planta (XY e Z) com os gráficos de aderência
+     3. Mapa 3D de execução (duas lâminas, com vistas de câmera diferentes)
+     4. Collar e profundidade em planta (XY e Z) com os gráficos de aderência
      5. Ângulo frontal e direção dos furos
      6. Desvios de azimute e de profundidade por furo
      7. Distribuições e aderência por plano
@@ -427,15 +427,14 @@ function relatorioPaginaMapa(ops, ctx) {
   ]);
 }
 
-function relatorioPaginaMapa3d(ops, ctx) {
-  const { d } = ctx;
+function relatorioPaginaMapa3d(ops, img) {
   const { M, LARGURA, TOPO } = RL;
   const h = 150;
-  if (!d.img3d) {
+  if (!img) {
     relatorioAviso(ops, M, TOPO, LARGURA, 20, "Mapa 3D indisponível: é preciso um navegador com WebGL e um DXF com geometria para o plano.");
     return;
   }
-  ops.push({ t: "bmp", x: M, y: TOPO, w: LARGURA, h, c: d.img3d });
+  ops.push({ t: "bmp", x: M, y: TOPO, w: LARGURA, h, c: img });
   relatorioLegenda(ops, M, TOPO + h + 9, [
     { t: "linha", c: RL.CINZA_CLARO, texto: "Planejado (tubos translúcidos)" },
     { t: "linha", c: RL.VERMELHO, texto: "Executado" },
@@ -587,8 +586,9 @@ function relatorioMontar(meta, res, d) {
   };
   relatorioPaginaConsolidado(nova(`DESVIOS DE PERFURAÇÃO - ${meta.plano}`, meta.plano), ctx);
   relatorioPaginaMapa(nova("MAPA DE EXECUÇÃO", "Planejado × executado, com o emboque de cada furo do período"), ctx);
-  relatorioPaginaMapa3d(nova("MAPA 3D DE EXECUÇÃO", meta.plano), ctx);
-  relatorioPaginaPlantas(nova("ADERÊNCIA EM PLANTA", "Collar previsto × realizado em planta (XY) e desvio de profundidade por furo (Z)"), ctx);
+  relatorioPaginaMapa3d(nova("MAPA 3D DE EXECUÇÃO", meta.plano), ctx.d.img3d);
+  relatorioPaginaMapa3d(nova("MAPA 3D DE EXECUÇÃO", meta.plano), ctx.d.img3dB);
+  relatorioPaginaPlantas(nova("COLLAR E PROFUNDIDADE EM PLANTA", "Collar previsto × realizado em planta (XY) e desvio de profundidade por furo (Z)"), ctx);
   relatorioPaginaPlantasAngAz(nova("INCLINAÇÃO E AZIMUTE EM PLANTA", "Inclinação e azimute de cada furo do plano, em planta, dentro e fora da tolerância"), ctx);
   relatorioPaginaAngulo(nova("ÂNGULO FRONTAL E DIREÇÃO", "Inclinação executada de cada furo e posição em relação ao previsto"), ctx);
   relatorioPaginaDesvios(nova("AZIMUTE E PROFUNDIDADE POR FURO", "Desvio executado menos previsto, em cada furo do período"), ctx);
@@ -753,14 +753,14 @@ async function relatorioImagemMapa(plano, holes, visibleIdsByPlan) {
 }
 
 /* Mapa 3D do plano: snapshot do módulo map3d.js com os furos visíveis. */
-async function relatorioImagem3d(plano, visiveis) {
+async function relatorioImagem3d(plano, visiveis, vista) {
   if (typeof window.map3dSnapshot !== "function" || !visiveis.length) return null;
   try {
     const lista = visiveis.map((h) => ({
       plano, id: h.id || null, collar: h.collar || null, planned: h.planned || null, real: h.real || null,
     }));
     const url = window.map3dSnapshot(lista,
-      Math.round(RL.LARGURA * RELATORIO_CSS_PX_MM), Math.round(150 * RELATORIO_CSS_PX_MM));
+      Math.round(RL.LARGURA * RELATORIO_CSS_PX_MM), Math.round(150 * RELATORIO_CSS_PX_MM), vista);
     if (!url) return null;
     const img = new Image();
     img.src = url;
@@ -800,7 +800,8 @@ async function relatorioColetar(plano) {
   const pm = planta ? plantaMetrics(planta.matches, registros) : null;
   const visiveis = holes ? holes.filter((h) => holeVisivel(plano, h, visibleIdsByPlan)) : [];
   const mapa = holes ? await relatorioImagemMapa(plano, holes, visibleIdsByPlan) : null;
-  const img3d = await relatorioImagem3d(plano, visiveis);
+  const img3d = await relatorioImagem3d(plano, visiveis, "frente");
+  const img3dB = await relatorioImagem3d(plano, visiveis, "oposta");
   const hs = histogramas(registros);
 
   const g = {
@@ -831,6 +832,7 @@ async function relatorioColetar(plano) {
     mapa,
     nMapa: visiveis.length,
     img3d,
+    img3dB,
     g,
     plantaXY: null,
     plantaZ: null,

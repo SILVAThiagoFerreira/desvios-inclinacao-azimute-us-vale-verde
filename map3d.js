@@ -23,6 +23,12 @@ const PLANNED_OPACITY = 0.4;
 // Sensibilidade média: metade da velocidade padrão do OrbitControls
 const SPEED = { rotate: 0.5, zoom: 0.5, pan: 0.5 };
 const LAYER_KEYS = ["planned", "real", "collar", "grid", "labels"];
+// Vistas do mapa 3D no relatório: direção da câmera a partir do centro (em raios da cena).
+// "frente": oblíqua do lado padrão do site; "oposta": oblíqua do lado oposto, mais alta.
+const REPORT_VIEWS = {
+  frente: [1.3, 1.0, 1.9],
+  oposta: [-1.9, 1.5, -1.3],
+};
 
 function main() {
   const root = document.getElementById("map3d-root");
@@ -684,7 +690,7 @@ function main() {
   // Monta só os furos informados na vista em perspectiva, renderiza uma vez e devolve o PNG.
   // Em seguida restaura a cena, a vista e as camadas da página, tudo na mesma tarefa
   // (o navegador não chega a repintar a cena temporária).
-  function snapshot(holes, largura, altura) {
+  function snapshot(holes, largura, altura, vista = "frente") {
     const salvo = {
       holes: current,
       hidden: [...hiddenKeys],
@@ -696,6 +702,13 @@ function main() {
       hiddenKeys.clear();
       viewMode = "persp";
       build(holes);
+      // Câmera da vista pedida (o enquadramento inicial usa a vista "frente")
+      if (home) {
+        const dir = new THREE.Vector3(...(REPORT_VIEWS[vista] || REPORT_VIEWS.frente)).multiplyScalar(home.R);
+        camera.position.copy(home.target).add(dir);
+        controls.target.copy(home.target);
+        controls.update();
+      }
       // Camadas do relatório sempre ligadas, sem depender dos checkboxes da página
       ["planned", "real", "collar", "grid"].forEach((k) => { layerGroups[k].visible = true; });
       layerGroups.labels.visible = false;
