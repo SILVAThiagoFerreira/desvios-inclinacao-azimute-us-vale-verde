@@ -72,6 +72,8 @@ let PLANEJADO = null;          // Map(plano -> [{ x, y, z, d }])
 let PLANEJADO_IGNORED = 0;     // linhas sem coordenadas completas
 let PLANEJADO_ERROR = "";
 let PLANEJADO_SIGNATURE = "";
+// Collares realizados por levantamento (data/levantamento-collares.json): plano -> { furos: [{ id, x, y, z }], ... }
+let LEVANTAMENTO = new Map();
 let PLANTA_TOKEN = 0;
 
 let PLANTA_ITEMS = [];         // itens do filtro atual (usados pelos mapas e pela janela)
@@ -116,7 +118,25 @@ function buildPlanejado(table) {
   return { plans, ignored };
 }
 
+/* Levantamento de collares realizados. Sem o arquivo, os planos seguem a fonte DXF (ponto Hole). */
+async function loadLevantamento() {
+  try {
+    const res = await fetch("./data/levantamento-collares.json", { cache: "no-store" });
+    if (!res.ok) return;
+    const doc = await res.json();
+    const mapa = new Map();
+    Object.keys(doc).forEach((plano) => {
+      const e = doc[plano];
+      if (!plano.startsWith("_") && e && Array.isArray(e.furos) && e.furos.length) mapa.set(plano, e);
+    });
+    LEVANTAMENTO = mapa;
+  } catch (e) {
+    console.warn("levantamento de collares indisponível:", e);
+  }
+}
+
 async function loadPlanejado() {
+  await loadLevantamento();
   try {
     const res = await fetch(PLANEJADO_GVIZ_URL, { cache: "no-store" });
     if (!res.ok) throw new Error("gviz HTTP " + res.status);
@@ -874,6 +894,13 @@ const plantaLabelsPlugin = {
         ctx.fillStyle = PLANTA_COLORS.green;
         ctx.textBaseline = "bottom";
         ctx.fillText(pct2(pct), bar.x, bar.y - 3);
+      } else {
+        // Sem dado: marca discreta sobre a linha de base, em duas linhas para caber na coluna
+        ctx.font = `600 8px ${family}`;
+        ctx.fillStyle = C.muted;
+        ctx.textBaseline = "bottom";
+        ctx.fillText("dado", bar.x, bar.base - 3);
+        ctx.fillText("s/", bar.x, bar.base - 12);
       }
       const count = opts.furos[i];
       if (count > 0 && bar.base - bar.y > 14) {
@@ -968,19 +995,30 @@ function plantaChartConfig(labels, values, furos) {
    Devolve null sem geometria. A página e o relatório por plano usam esta função. */
 function plantaParear(plano, holes, tf) {
   if (!holes || !holes.length) return null;
+  // Com levantamento do plano, o collar realizado vem dele (furo a furo, por ID); senão, do ponto Hole do DXF.
+  const lev = LEVANTAMENTO.get(plano) || null;
   const realized = [];
-  holes.forEach((h) => {
-    const c = h.collar || (h.real && h.real[0]);
-    if (!c || !isFinite(c.x) || !isFinite(c.y) || !isFinite(c.z)) return;
-    const num = Number(h.id);
-    const id = h.id ? (isFinite(num) ? String(num) : String(h.id).trim()) : null;
-    realized.push({ x: c.x, y: c.y, z: c.z, id });
-  });
-  const { matches, unmatchedR, unmatchedP } = matchPlanCollars(PLANEJADO.get(plano) || [], realized);
-  // Se quase todo collar realizado coincide com o previsto (< 1 mm), o ponto 'Hole' do DXF repete o previsto:
-  // o XY não mede desvio e fica marcado como sem dado confiável (em vez de 100%).
+  if (lev) {
+    lev.furos.forEach((f) => {
+      if (!isFinite(f.x) || !isFinite(f.y) || !isFinite(f.z)) return;
+      realized.push({ x: f.x, y: f.y, z: f.z, id: String(Number(f.id)) });
+    });
+  } else {
+    holes.forEach((h) => {
+      const c = h.collar || (h.real && h.real[0]);
+      if (!c || !isFinite(c.x) || !isFinite(c.y) || !isFinite(c.z)) return;
+      const num = Number(h.id);
+      const id = h.id ? (isFinite(num) ? String(num) : String(h.id).trim()) : null;
+      realized.push({ x: c.x, y: c.y, z: c.z, id });
+    });
+  }
+  const { matches, unmatchedR, unmatchedP: unmatchedPAll } = matchPlanCollars(PLANEJADO.get(plano) || [], realized);
+  // Com levantamento, previstos sem levantamento não entram na planta (não há realizado para eles).
+  const unmatchedP = lev ? [] : unmatchedPAll;
+  // Sem levantamento: se quase todo collar realizado coincide com o previsto (< 1 mm), o ponto 'Hole' do DXF
+  // repete o previsto: o XY não mede desvio e fica marcado como sem dado confiável (em vez de 100%).
   const exatos = matches.filter((m) => m.dxy < 0.001).length;
-  const xyDuvidoso = matches.length > 0 && exatos / matches.length >= 0.95;
+  const xyDuvidoso = !lev && matches.length > 0 && exatos / matches.length >= 0.95;
   matches.forEach((m) => { m.xyDuvidoso = xyDuvidoso; });
   const profs = plantaUltimoPorFuro(plano, tf, "depthDelta");
   const angs = plantaUltimoPorFuro(plano, tf, "angle");
@@ -1097,7 +1135,8 @@ async function drawPlanta() {
   const todosMatches = planos.flatMap((p) => p.matches);
   const all = plantaMetrics(todosMatches, planos.flatMap((p) => plantaRegistrosDoPlano(p.plano, tf)));
   const labels = [...rows.map((r) => r.plano), "TOTAL"];
-  const labelsXY = [...rows.map((r) => (r.xyPct == null ? `${r.plano} · XY s/ dado` : r.plano)), "TOTAL · XY com dado"];
+  // Rótulos limpos: só o código do plano; "s/ dado" aparece como marca no lugar da barra (plantaLabelsPlugin)
+  const labelsXY = labels;
   const furos = [...rows.map((r) => r.n), all.n];
   const serie = (eixo) => [...rows.map((r) => plantaPctDoEixo(r, eixo)), plantaPctDoEixo(all, eixo)];
   PLANTA_CHART_DATA = {
@@ -1117,6 +1156,10 @@ async function drawPlanta() {
   if (PLANEJADO_ERROR) partes.push(`${PLANEJADO_ERROR} (mostrando a última leitura)`);
   if (PLANEJADO_IGNORED) partes.push(`${PLANEJADO_IGNORED} linha(s) da planilha sem coordenadas completas foram ignoradas`);
   if (semDxf.length) partes.push(`sem DXF: ${semDxf.join(", ")}`);
+  planos.forEach((p) => {
+    const lev = LEVANTAMENTO.get(p.plano);
+    if (lev) partes.push(`${p.plano}: XY com levantamento de ${fmtInt(lev.furos.length)} de ${fmtInt(lev.furos_previstos || lev.furos.length)} furos (${lev.planilha}, aba ${lev.aba})`);
+  });
   setPlantaStatus(partes.join(" · "));
   if (document.getElementById("planta-dialog")?.open) renderPlanDialog();
 }
