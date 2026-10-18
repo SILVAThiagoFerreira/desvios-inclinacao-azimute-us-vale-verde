@@ -437,28 +437,21 @@ function relatorioPaginaMapa3d(ops, ctx) {
   ]);
 }
 
-function relatorioPaginaPlantas(ops, ctx) {
-  const { d } = ctx;
-  const { M, CW, GT, GY, GX, TOPO } = RL;
+/* Lâmina de duas plantas lado a lado (XY e Z, ou inclinação e azimute), gráfico de aderência do par e tolerâncias. */
+function relatorioLaminaPlantas(ops, cfg) {
+  const { M, CW, GT, GY, GX } = RL;
   const X2 = M + CW + GX;
   const H1 = 64;
-  if (!d.plantaXY) {
-    relatorioAviso(ops, M, TOPO, RL.LARGURA, 20, d.semDxf
-      ? "Sem desenho DXF para o plano: a planta em XY e Z não pode ser desenhada."
-      : "Coordenadas previstas indisponíveis para este plano: a planta não pode ser desenhada.");
-    return;
-  }
-  const semXY = d.pm && d.pm.xyPct == null ? " · sem dado confiável" : "";
-  const yP = relatorioRotulo(ops, M, GT, CW, `Planta XY · tolerância ${relTol.xy}${semXY}`);
-  ops.push({ t: "bmp", x: M, y: yP, w: CW, h: H1, c: d.plantaXY });
-  const yPZ = relatorioRotulo(ops, X2, GT, CW, `Planta Z · profundidade · tolerância ${relTol.z}`);
-  ops.push({ t: "bmp", x: X2, y: yPZ, w: CW, h: H1, c: d.plantaZ });
+  const yP = relatorioRotulo(ops, M, GT, CW, cfg.tituloA);
+  ops.push({ t: "bmp", x: M, y: yP, w: CW, h: H1, c: cfg.imgA });
+  const yPZ = relatorioRotulo(ops, X2, GT, CW, cfg.tituloB);
+  ops.push({ t: "bmp", x: X2, y: yPZ, w: CW, h: H1, c: cfg.imgB });
   const yG = yP + H1 + GY;
-  const yGb = relatorioRotulo(ops, M, yG, CW, `Aderência em planta por eixo (% dentro do limite) · ${relTol.meta}`);
-  ops.push({ t: "bmp", x: M, y: yGb, w: CW, h: 48, c: d.gPlanta });
+  const yGb = relatorioRotulo(ops, M, yG, CW, cfg.tituloGrafico);
+  ops.push({ t: "bmp", x: M, y: yGb, w: CW, h: 48, c: cfg.grafico });
   const yT = relatorioRotulo(ops, X2, yG, CW, "Tolerâncias e legenda");
   let yy = yT + 3;
-  [`Collar XY: ${relTol.xy}`, `Profundidade: ${relTol.z}`, `Meta de aderência: ${relTol.meta}`].forEach((t) => {
+  cfg.tolerancias.forEach((t) => {
     ops.push({ t: "text", s: t, x: X2, y: yy, size: 9, c: RL.PRETO });
     yy += 5.2;
   });
@@ -472,6 +465,49 @@ function relatorioPaginaPlantas(ops, ctx) {
   ].forEach((it) => {
     relatorioLegenda(ops, X2, yy, [it]);
     yy += 5.2;
+  });
+}
+
+/* Lâmina "Aderência em planta": XY e Z (planta do collar e de profundidade). */
+function relatorioPaginaPlantas(ops, ctx) {
+  const { d } = ctx;
+  const { M, TOPO } = RL;
+  if (!d.plantaXY) {
+    relatorioAviso(ops, M, TOPO, RL.LARGURA, 20, d.semDxf
+      ? "Sem desenho DXF para o plano: a planta em XY e Z não pode ser desenhada."
+      : "Coordenadas previstas indisponíveis para este plano: a planta não pode ser desenhada.");
+    return;
+  }
+  const semXY = d.pm && d.pm.xyPct == null ? " · sem dado confiável" : "";
+  relatorioLaminaPlantas(ops, {
+    imgA: d.plantaXY,
+    imgB: d.plantaZ,
+    grafico: d.gPlanta,
+    tituloA: `Planta XY · tolerância ${relTol.xy}${semXY}`,
+    tituloB: `Planta Z · profundidade · tolerância ${relTol.z}`,
+    tituloGrafico: `Aderência em planta por eixo (% dentro do limite) · ${relTol.meta}`,
+    tolerancias: [`Collar XY: ${relTol.xy}`, `Profundidade: ${relTol.z}`, `Meta de aderência: ${relTol.meta}`],
+  });
+}
+
+/* Lâmina "Inclinação e azimute em planta": cada furo colorido pela inclinação e pelo azimute do site. */
+function relatorioPaginaPlantasAngAz(ops, ctx) {
+  const { d } = ctx;
+  const { M, TOPO } = RL;
+  if (!d.plantaAng) {
+    relatorioAviso(ops, M, TOPO, RL.LARGURA, 20, d.semDxf
+      ? "Sem desenho DXF para o plano: as plantas de inclinação e azimute não podem ser desenhadas."
+      : "Coordenadas previstas indisponíveis para este plano: as plantas não podem ser desenhadas.");
+    return;
+  }
+  relatorioLaminaPlantas(ops, {
+    imgA: d.plantaAng,
+    imgB: d.plantaAz,
+    grafico: d.gPlantaAng,
+    tituloA: `Planta inclinação · faixa ${relTol.ang}`,
+    tituloB: `Planta azimute · tolerância ${relTol.az}`,
+    tituloGrafico: `Aderência em planta por parâmetro (% dentro do limite) · ${relTol.meta}`,
+    tolerancias: [`Inclinação: faixa ${relTol.ang}`, `Azimute: ${relTol.az}`, `Meta de aderência: ${relTol.meta}`],
   });
 }
 
@@ -547,6 +583,7 @@ function relatorioMontar(meta, res, d) {
   relatorioPaginaMapa(nova("MAPA DE EXECUÇÃO", "Planejado × executado, com o emboque de cada furo do período"), ctx);
   relatorioPaginaMapa3d(nova("MAPA 3D DE EXECUÇÃO", meta.plano), ctx);
   relatorioPaginaPlantas(nova("ADERÊNCIA EM PLANTA", "Collar previsto × realizado em planta (XY) e desvio de profundidade por furo (Z)"), ctx);
+  relatorioPaginaPlantasAngAz(nova("INCLINAÇÃO E AZIMUTE EM PLANTA", "Inclinação e azimute de cada furo do plano, em planta, dentro e fora da tolerância"), ctx);
   relatorioPaginaAngulo(nova("ÂNGULO FRONTAL E DIREÇÃO", "Inclinação executada de cada furo e posição em relação ao previsto"), ctx);
   relatorioPaginaDesvios(nova("AZIMUTE E PROFUNDIDADE POR FURO", "Desvio executado menos previsto, em cada furo do período"), ctx);
   relatorioPaginaDistribuicoes(nova("DISTRIBUIÇÕES E ADERÊNCIA POR PLANO", "Quantidade de furos por faixa de desvio e aderência do plano"), ctx);
@@ -629,15 +666,15 @@ function relatorioAjustarBarras(chart) {
   chart.update("none");
 }
 
-/* Aderência em planta do plano: uma barra para XY e outra para Z, com a meta como linha horizontal. */
-function relatorioPlantaChart(cv, key, pm) {
+/* Aderência em planta do plano: duas barras (o par XY e Z, ou inclinação e azimute), com a meta como linha horizontal. */
+function relatorioPlantaChart(cv, key, labels, valores) {
   const pv = (v) => (v != null && isFinite(v) ? v : null);
   CHARTS[key] = new Chart(cv, aplicarAlvo({
     type: "bar",
     data: {
-      labels: [pm.xyPct == null ? "Planta XY · sem dado" : "Planta XY", "Planta Z"],
+      labels,
       datasets: [{
-        label: "Aderência", data: [pv(pm.xyPct), pv(pm.zPct)],
+        label: "Aderência", data: valores.map(pv),
         backgroundColor: PLANTA_COLORS.green, borderWidth: 0, barPercentage: 0.5, categoryPercentage: 0.7,
       }],
     },
@@ -730,7 +767,7 @@ async function relatorioImagem3d(plano, visiveis) {
 }
 
 /* Planta XY ou Z do plano: o mesmo cartão da janela "Ver todos os planos" (drawPlantaCardCanvas). */
-function relatorioImagemPlanta(p, mode, larg, alt) {
+function relatorioImagemPlanta(p, mode, larg, alt, m) {
   const cw = Math.round(larg * RELATORIO_CSS_PX_MM);
   const ch = Math.round(alt * RELATORIO_CSS_PX_MM);
   const cv = document.createElement("canvas");
@@ -738,7 +775,7 @@ function relatorioImagemPlanta(p, mode, larg, alt) {
   cv.height = ch * RELATORIO_DPR;
   const ctx = cv.getContext("2d");
   ctx.scale(RELATORIO_DPR, RELATORIO_DPR);
-  drawPlantaCardCanvas(ctx, 0, 0, cw, ch, p.plano, plantaItensDoPlano(p), plantaMetrics(p.matches), mode);
+  drawPlantaCardCanvas(ctx, 0, 0, cw, ch, p.plano, plantaItensDoPlano(p), m, mode);
   return cv;
 }
 
@@ -753,7 +790,8 @@ async function relatorioColetar(plano) {
     try { await loadPlanejado(); } catch (e) { /* sem coordenadas previstas: a planta não é desenhada */ }
   }
   const planta = holes && PLANEJADO ? plantaParear(plano, holes, plantaTimeFilter()) : null;
-  const pm = planta ? plantaMetrics(planta.matches) : null;
+  // Inclinação e azimute do plano vêm dos registros do período (mesma base dos KPIs)
+  const pm = planta ? plantaMetrics(planta.matches, registros) : null;
   const visiveis = holes ? holes.filter((h) => holeVisivel(plano, h, visibleIdsByPlan)) : [];
   const mapa = holes ? await relatorioImagemMapa(plano, holes, visibleIdsByPlan) : null;
   const img3d = await relatorioImagem3d(plano, visiveis);
@@ -791,11 +829,19 @@ async function relatorioColetar(plano) {
     plantaXY: null,
     plantaZ: null,
     gPlanta: null,
+    plantaAng: null,
+    plantaAz: null,
+    gPlantaAng: null,
   };
   if (planta) {
-    d.plantaXY = relatorioImagemPlanta(planta, "xy", RL.CW, 64);
-    d.plantaZ = relatorioImagemPlanta(planta, "z", RL.CW, 64);
-    d.gPlanta = relatorioGrafico(RL.CW, 48, (cv, key) => relatorioPlantaChart(cv, key, pm));
+    d.plantaXY = relatorioImagemPlanta(planta, "xy", RL.CW, 64, pm);
+    d.plantaZ = relatorioImagemPlanta(planta, "z", RL.CW, 64, pm);
+    d.gPlanta = relatorioGrafico(RL.CW, 48, (cv, key) => relatorioPlantaChart(cv, key,
+      [pm.xyPct == null ? "Planta XY · sem dado" : "Planta XY", "Planta Z"], [pm.xyPct, pm.zPct]));
+    d.plantaAng = relatorioImagemPlanta(planta, "ang", RL.CW, 64, pm);
+    d.plantaAz = relatorioImagemPlanta(planta, "az", RL.CW, 64, pm);
+    d.gPlantaAng = relatorioGrafico(RL.CW, 48, (cv, key) => relatorioPlantaChart(cv, key,
+      ["Inclinação", "Azimute"], [pm.angPct, pm.azPct]));
   }
   return d;
 }

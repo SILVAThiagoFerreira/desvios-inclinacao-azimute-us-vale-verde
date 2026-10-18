@@ -877,6 +877,8 @@ body {
   margin-bottom: 8px;
 }
 .planta-map-tools__hint { font-size: 11px; color: var(--muted); }
+/* Com mouse, a dica de zoom e arraste fica na janela "Ver todos os planos" */
+@media (hover: hover) { .planta-map-tools__hint { display: none; } }
 .planta-map {
   display: block;
   width: 100%;
@@ -949,7 +951,7 @@ body {
 }
 
 /* Gráficos de aderência da planta: uma coluna, rótulos pequenos e espaço para leitura */
-.chart-row.planta-charts { grid-template-columns: 1fr; }
+.chart-row.planta-charts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .planta-charts .chart-block__body--tall { min-height: 340px; }
 
 
@@ -1084,6 +1086,7 @@ body {
 .planta-card__svg.is-dragging { cursor: grabbing; }
 @media (max-width: 980px) {
   .planta-maps { grid-template-columns: 1fr; }
+  .chart-row.planta-charts { grid-template-columns: 1fr; }
 }
 
 /* Barra de status: some quando tudo carregou (mensagem de sucesso removida) */
@@ -1158,13 +1161,15 @@ body {
   .planta-card__tools { flex-wrap: wrap; }
 }
 
-/* TV e telas grandes: a página inteira aumenta para ficar legível a distância */
+/* TV e telas grandes: a página inteira aumenta para ficar legível a distância.
+   Só vale para dispositivos sem mouse (hover: none, como TV e tela de toque), para o PC
+   em 1920 px ficar na escala normal. */
 :root { --page-zoom: 1; }
-@media (min-width: 1800px) {
+@media (min-width: 1800px) and (hover: none) {
   html { zoom: 1.3; }
   :root { --page-zoom: 1.3; }
 }
-@media (min-width: 2800px) {
+@media (min-width: 2800px) and (hover: none) {
   html { zoom: 1.7; }
   :root { --page-zoom: 1.7; }
 }

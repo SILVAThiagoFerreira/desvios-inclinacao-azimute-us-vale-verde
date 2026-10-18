@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="./assets/enaex-favicon.png">
   <meta name="description" content="Análise de desvios de inclinação, azimute e profundidade dos furos de perfuração — US Vale Verde.">
   <link rel="preconnect" href="https://docs.google.com">
-  <link rel="stylesheet" href="./styles.css?v=29">
+  <link rel="stylesheet" href="./styles.css?v=31">
 </head>
 <body>
   <header class="topbar">
@@ -219,6 +219,60 @@
                 <div id="planta-tooltip-z" class="planta-tooltip" hidden></div>
               </div>
             </section>
+            <section class="planta-map-block" aria-labelledby="planta-ang-title">
+              <div class="planta-map-block__head">
+                <div>
+                  <h3 id="planta-ang-title">Planta inclinação</h3>
+                  <p class="planta-map-block__sub">Ângulo frontal de cada furo (faixa: <span id="planta-ang-limite">11,8° a 18,2°</span>)</p>
+                </div>
+                <button id="planta-open-ang" type="button" class="planta-open-btn">Ver todos os planos</button>
+              </div>
+              <div class="planta-legend" role="group" aria-label="Legenda da planta de inclinação">
+                <span class="planta-legend__item"><span class="planta-legend__dot planta-legend__dot--ok"></span>Dentro da inclinação</span>
+                <span class="planta-legend__item"><span class="planta-legend__dot planta-legend__dot--red"></span>Fora da inclinação</span>
+                <span class="planta-legend__item"><span class="planta-legend__dot planta-legend__dot--blue"></span>Realizado sem previsto</span>
+                <span class="planta-legend__item"><span class="planta-legend__ring"></span>Collar previsto</span>
+                <span class="planta-legend__item"><span class="planta-legend__ring planta-legend__ring--dashed"></span>Previsto sem furo realizado</span>
+                <span class="planta-legend__item"><span class="planta-legend__link"></span>Ligação previsto × realizado</span>
+              </div>
+              <div class="planta-map-wrap">
+                <div class="planta-map-tools" role="group" aria-label="Controles da planta de inclinação">
+                  <button id="planta-ang-zoom-in" type="button" class="filter-reset" aria-label="Aproximar">+</button>
+                  <button id="planta-ang-zoom-out" type="button" class="filter-reset" aria-label="Afastar">−</button>
+                  <button id="planta-ang-zoom-reset" type="button" class="filter-reset">Redefinir vista</button>
+                  <span class="planta-map-tools__hint">Roda do mouse: zoom · arraste: mover · duplo clique: redefinir · passe o mouse sobre um furo</span>
+                </div>
+                <svg id="planta-map-ang" class="planta-map" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Planta de inclinação de todos os planos: collar previsto e realizado"></svg>
+                <div id="planta-tooltip-ang" class="planta-tooltip" hidden></div>
+              </div>
+            </section>
+            <section class="planta-map-block" aria-labelledby="planta-az-title">
+              <div class="planta-map-block__head">
+                <div>
+                  <h3 id="planta-az-title">Planta azimute</h3>
+                  <p class="planta-map-block__sub">Desvio de azimute de cada furo, real − previsto (limite: <span id="planta-az-limite">±6,39°</span>)</p>
+                </div>
+                <button id="planta-open-az" type="button" class="planta-open-btn">Ver todos os planos</button>
+              </div>
+              <div class="planta-legend" role="group" aria-label="Legenda da planta de azimute">
+                <span class="planta-legend__item"><span class="planta-legend__dot planta-legend__dot--ok"></span>Dentro do azimute</span>
+                <span class="planta-legend__item"><span class="planta-legend__dot planta-legend__dot--red"></span>Fora do azimute</span>
+                <span class="planta-legend__item"><span class="planta-legend__dot planta-legend__dot--blue"></span>Realizado sem previsto</span>
+                <span class="planta-legend__item"><span class="planta-legend__ring"></span>Collar previsto</span>
+                <span class="planta-legend__item"><span class="planta-legend__ring planta-legend__ring--dashed"></span>Previsto sem furo realizado</span>
+                <span class="planta-legend__item"><span class="planta-legend__link"></span>Ligação previsto × realizado</span>
+              </div>
+              <div class="planta-map-wrap">
+                <div class="planta-map-tools" role="group" aria-label="Controles da planta de azimute">
+                  <button id="planta-az-zoom-in" type="button" class="filter-reset" aria-label="Aproximar">+</button>
+                  <button id="planta-az-zoom-out" type="button" class="filter-reset" aria-label="Afastar">−</button>
+                  <button id="planta-az-zoom-reset" type="button" class="filter-reset">Redefinir vista</button>
+                  <span class="planta-map-tools__hint">Roda do mouse: zoom · arraste: mover · duplo clique: redefinir · passe o mouse sobre um furo</span>
+                </div>
+                <svg id="planta-map-az" class="planta-map" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Planta de azimute de todos os planos: collar previsto e realizado"></svg>
+                <div id="planta-tooltip-az" class="planta-tooltip" hidden></div>
+              </div>
+            </section>
           </div>
         </div>
       </div>
@@ -237,6 +291,20 @@
             <p>Furos com desvio de profundidade dentro da tolerância</p>
           </div>
           <div class="chart-block__body chart-block__body--tall"><div class="chart-scroll"><canvas id="planta-chart-z"></canvas></div></div>
+        </div>
+        <div class="chart-block chart-block--half">
+          <div class="chart-block__head">
+            <h2>Inclinação</h2>
+            <p>Furos com ângulo frontal dentro da faixa</p>
+          </div>
+          <div class="chart-block__body chart-block__body--tall"><div class="chart-scroll"><canvas id="planta-chart-ang"></canvas></div></div>
+        </div>
+        <div class="chart-block chart-block--half">
+          <div class="chart-block__head">
+            <h2>Azimute</h2>
+            <p>Furos com desvio de azimute dentro da tolerância</p>
+          </div>
+          <div class="chart-block__body chart-block__body--tall"><div class="chart-scroll"><canvas id="planta-chart-az"></canvas></div></div>
         </div>
       </div>
 
@@ -423,8 +491,8 @@
     }
   </script>
   <script type="module" src="./map3d.js?v=13"></script>
-  <script src="./planta.js?v=14"></script>
-  <script src="./relatorio-plano.js?v=13"></script>
+  <script src="./planta.js?v=16"></script>
+  <script src="./relatorio-plano.js?v=14"></script>
   <script src="./app.js?v=25"></script>
   <script src="./excel-export-v2.js?v=5"></script>
 </body>
