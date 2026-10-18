@@ -87,14 +87,14 @@ O bloco "Aderência em planta" compara, em cada plano, o collar previsto com o c
   estar com acesso "Qualquer pessoa com o link", como a planilha principal.
 - **Realizado:** ponto do layer `Hole` de cada DXF do plano (mesma fonte do mapa).
 - **Pareamento:** cada collar previsto é ligado ao realizado mais próximo em planta, um para
+- **XY sem dado confiável:** se 95% ou mais dos collares pareados coincidem com o previsto (menos de 1 mm), o ponto `Hole` do DXF repete o previsto e o XY do plano não mede desvio. Nesse caso o XY fica como "sem dado confiável" (cinza no mapa, sem barra no gráfico, "—" no relatório), em vez de 100%.
   um, até 2,0 m (`COLLAR_MATCH_MAX` em `planta.js`).
 - **Tolerâncias:** deslocamento XY (distância em planta) ≤ 2 × diâmetro projetado do furo,
   com o diâmetro da coluna `DIAMETRO` em milímetros (101,6 mm = limite de 0,2032 m; 127 mm =
   limite de 0,254 m; 139,7 mm = limite de 0,2794 m).
-  Furos sem diâmetro usam 0,50 m (`COLLAR_TOL_XY`). Z: |Z realizado − Z previsto| ≤ limite de profundidade do site (±0,20 m por padrão, `LIMITS.depth`)
-  (`COLLAR_TOL_Z`). Constantes em `planta.js`.
-- **Dois mapas:** o bloco mostra dois mapas em planta do mesmo filtro, lado a lado (em tela estreita, um embaixo do outro): **Planta XY** (distância em planta) e **Planta Z** (diferença de cota). Cada um tem seu botão "Ver todos os planos".
-- **Cores (Planta XY):** verde, dentro da tolerância XY; vermelho, fora. **Cores (Planta Z):** verde, dentro de ±0,20 m (limite de profundidade); vermelho, fora. Nos dois, azul é realizado sem previsto correspondente (não entra no cálculo) e anel tracejado é previsto sem furo realizado.
+  Furos sem diâmetro usam 0,50 m (`COLLAR_TOL_XY`). Z: usa o desvio de profundidade do furo (Δ PROFUNDIDADE da planilha, real − previsto) com o mesmo limite de profundidade do site (±0,20 m por padrão, `LIMITS.depth`). A diferença de cota do collar não entra no cálculo de Z.
+- **Dois mapas:** o bloco mostra dois mapas em planta do mesmo filtro, lado a lado (em tela estreita, um embaixo do outro): **Planta XY** (distância em planta) e **Planta Z** (desvio de profundidade do furo). Cada um tem seu botão "Ver todos os planos".
+- **Cores (Planta XY):** verde, dentro da tolerância XY; vermelho, fora. **Cores (Planta Z):** verde, desvio de profundidade dentro de ±0,20 m; vermelho, fora; cinza, furo sem registro de profundidade no período. Nos dois, azul é realizado sem previsto correspondente (não entra no cálculo) e anel tracejado é previsto sem furo realizado.
 - O botão "Ver todos os planos" de cada mapa abre uma janela com um bloco de planta por plano do filtro, colorido pelo eixo daquele mapa. Role a janela para ver todos; em cada plano, Ctrl + roda do mouse dá zoom e o arraste move.
 - A janela "Ver todos os planos" tem os botões "Exportar PDF" e "Exportar imagem", que geram um documento do eixo da janela aberta (XY ou Z), com todos os planos do filtro e os gráficos XY e Z. Clicar fora da janela fecha. A barra de status só aparece em carregamento ou erro.
 - Os filtros de ANO, MÊS e PLANO valem para o bloco. Sem filtro de período, os previstos sem

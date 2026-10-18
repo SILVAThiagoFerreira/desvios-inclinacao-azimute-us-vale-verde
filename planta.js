@@ -8,7 +8,7 @@
    realizado mais próximo em planta (um para um, do menor para o maior
    desvio), até COLLAR_MATCH_MAX metros.
    Dois mapas em planta no bloco: XY (cor pelo desvio em planta) e Z (cor
-   pela diferença de cota). Cada um tem zoom, arraste, tooltip e um botão
+   pelo desvio de profundidade do furo, real − previsto, limite ±0,20 m). Cada um tem zoom, arraste, tooltip e um botão
    que abre a janela com um bloco por plano, no mesmo eixo.
    Depende de app.js (RECORDS, fetchDxfHoles, parseGviz, norm, destroy,
    CHARTS, C, LIMITS, fmtNum, fmtInt).
@@ -24,8 +24,8 @@ const PLANTA_DISP_FATOR = 2;
 const MM_EM_M = 0.001;
 // Fallback para furos sem diâmetro na planilha (metros)
 const COLLAR_TOL_XY = 0.5;
-// Tolerância Z do collar (metros): o mesmo limite de profundidade do site (LIMITS.depth,
-// vindo de data/parametros.json ou da tabela de parâmetros), ±0,20 m por padrão.
+// Tolerância do eixo Z da planta (metros): é o desvio de profundidade do furo, com o mesmo
+// limite do site (LIMITS.depth, ±0,20 m por padrão). Não é diferença de cota do collar.
 const plantaTolZ = () => LIMITS.depth;
 // Distância máxima para parear um collar previsto a um realizado (metros).
 const COLLAR_MATCH_MAX = 2.0;
@@ -38,11 +38,12 @@ const PLANTA_COLORS = {
   red: "#e20613",     // fora da tolerância do eixo
   blue: "#2563a8",    // realizado sem previsto correspondente
   planned: "#7b858d", // collar previsto
+  na: "#7b858d",      // furo sem registro de profundidade no período (não entra no Z)
   link: "#b9c0c6",    // linha entre previsto e realizado
 };
 const PLANTA_MODE_LABEL = {
-  xy: { ok: "Dentro do XY", red: "Fora do XY" },
-  z: { ok: "Dentro do Z", red: "Fora do Z" },
+  xy: { ok: "Dentro do XY", red: "Fora do XY", na: "Sem dado confiável de XY" },
+  z: { ok: "Dentro da profundidade", red: "Fora da profundidade", na: "Sem registro de profundidade" },
 };
 const PLANTA_MODE_TITLE = { xy: "Planta XY", z: "Planta Z" };
 const PLANTA_LEGEND_ORDER = { "Aderência": 0, "Furos": 1, "Meta": 2 };
@@ -141,7 +142,7 @@ function matchPlanCollars(planned, realized) {
     usedP[j] = 1;
     const r = realized[i];
     const p = planned[j];
-    matches.push({ r, p, dxy: d, dz: r.z - p.z });
+    matches.push({ r, p, dxy: d, dprof: null });
   }
   return {
     matches,
@@ -154,6 +155,17 @@ function plantaTimeFilter() {
   const y = document.getElementById("filter-year")?.value || "";
   const mo = document.getElementById("filter-month")?.value || "";
   return { y, mo, active: Boolean(y || mo) };
+}
+
+/* Desvio de profundidade (real − previsto, m) de cada furo do plano no período. Um furo com mais de um registro usa o mais recente. */
+function plantaProfundidadePorFuro(plano, tf) {
+  const mapa = new Map();
+  RECORDS
+    .filter((r) => r.plano === plano && r.id && r.depthDelta != null &&
+      (!tf.y || String(r.ano) === tf.y) && (!tf.mo || String(r.mes) === tf.mo))
+    .sort((a, b) => (a.data ? a.data.getTime() : 0) - (b.data ? b.data.getTime() : 0))
+    .forEach((r) => mapa.set(String(Number(r.id)), r.depthDelta));
+  return mapa;
 }
 
 function plantaVisibleIds(plano, tf) {
@@ -171,20 +183,31 @@ function tolXY(p) {
 
 /* Situação de um furo pareado no eixo pedido: "ok" dentro da tolerância, "red" fora. */
 function plantaStatusFor(m, mode) {
-  if (mode === "z") return Math.abs(m.dz) <= plantaTolZ() ? "ok" : "red";
+  if (mode === "z") {
+    if (m.dprof == null) return "na";
+    return Math.abs(m.dprof) <= plantaTolZ() ? "ok" : "red";
+  }
+  if (m.xyDuvidoso) return "na";
   return m.dxy <= tolXY(m.p) ? "ok" : "red";
 }
 
 function plantaMetrics(matches) {
   const n = matches.length;
-  const xy = matches.filter((m) => m.dxy <= tolXY(m.p)).length;
-  const z = matches.filter((m) => Math.abs(m.dz) <= plantaTolZ()).length;
+  // XY só conta os pares de planos com dado confiável (ver plantaParear)
+  const validos = matches.filter((m) => !m.xyDuvidoso);
+  const xyN = validos.length;
+  const xy = validos.filter((m) => m.dxy <= tolXY(m.p)).length;
+  // Z conta só os furos com registro de profundidade no período (mesma base da conformidade de profundidade).
+  const zn = matches.filter((m) => m.dprof != null).length;
+  const z = matches.filter((m) => m.dprof != null && Math.abs(m.dprof) <= plantaTolZ()).length;
   return {
     n,
     xy,
+    xyN,
     z,
-    xyPct: n ? (xy / n) * 100 : null,
-    zPct: n ? (z / n) * 100 : null,
+    zn,
+    xyPct: xyN ? (xy / xyN) * 100 : null,
+    zPct: zn ? (z / zn) * 100 : null,
   };
 }
 
@@ -427,7 +450,10 @@ function buildPlantaTooltip(tip, item, mode) {
     add("Realizado", xyz(item.r));
     const lim = tolXY(item.p);
     add("Δ XY", `${fmtNum(item.dxy, 3)} m (limite ${fmtNum(lim, 3)} m)`);
-    add("Δ Z", `${item.dz >= 0 ? "+" : ""}${fmtNum(item.dz, 2)} m (limite ±${fmtNum(plantaTolZ(), 2)} m)`);
+    if (item.xyDuvidoso) add("XY", "sem dado confiável: o DXF repete o collar previsto");
+    add("Δ profundidade", item.dprof != null
+      ? `${item.dprof >= 0 ? "+" : ""}${fmtNum(item.dprof, 2)} m (limite ±${fmtNum(plantaTolZ(), 2)} m)`
+      : "sem registro no período");
     add("Diâmetro", item.p.d != null ? `${fmtDiam(item.p.d)} mm` : "não informado (limite XY padrão)");
   }
   if (plan && plan.n) {
@@ -663,7 +689,7 @@ function renderPlanDialog() {
   if (titulo) titulo.textContent = `${PLANTA_MODE_TITLE[PLANTA_DIALOG_MODE]} · todos os planos`;
   const sub = document.getElementById("planta-dialog-sub");
   if (sub) sub.textContent = PLANTA_DIALOG_MODE === "z"
-    ? `Cada furo colorido pela diferença de cota (realizado − previsto): verde dentro de ±${fmtNum(plantaTolZ(), 2)} m, vermelho fora. Mesmo filtro da página. Role a janela para ver todos os planos. Em cada plano: Ctrl + roda do mouse para zoom, arraste para mover, duplo clique para redefinir.`
+    ? `Cada furo colorido pelo desvio de profundidade (real − previsto do furo): verde dentro de ±${fmtNum(plantaTolZ(), 2)} m, vermelho fora. Furo sem registro de profundidade fica cinza. Mesmo filtro da página. Role a janela para ver todos os planos. Em cada plano: Ctrl + roda do mouse para zoom, arraste para mover, duplo clique para redefinir.`
     : "Cada furo colorido pela distância em planta entre o collar previsto e o realizado: verde dentro de 2 × diâmetro projetado, vermelho fora. Mesmo filtro da página. Role a janela para ver todos os planos. Em cada plano: Ctrl + roda do mouse para zoom, arraste para mover, duplo clique para redefinir.";
   PLANTA_CARDS = [];
   destroy("plantaDlgXY");
@@ -692,7 +718,7 @@ function buildPlanDialogCharts() {
   section.className = "planta-dialog__charts";
   const titles = [
     ["XY", "Furos com distância previsto × realizado em planta dentro da tolerância XY", "planta-dlg-chart-xy"],
-    ["Z", "Furos com cota realizada dentro da tolerância Z em relação ao previsto", "planta-dlg-chart-z"],
+    ["Z", "Furos com desvio de profundidade dentro de ±" + fmtNum(plantaTolZ(), 2) + " m", "planta-dlg-chart-z"],
   ];
   titles.forEach(([name, text, id]) => {
     const head = document.createElement("h3");
@@ -713,8 +739,8 @@ function buildPlanDialogCharts() {
   });
   // os canvas já estão no documento quando os gráficos são criados
   queueMicrotask(() => {
-    const { labels, xy, z, furos } = PLANTA_CHART_DATA;
-    CHARTS.plantaDlgXY = new Chart(document.getElementById("planta-dlg-chart-xy"), plantaChartConfig(labels, xy, furos));
+    const { labels, xyLabels, xy, z, furos } = PLANTA_CHART_DATA;
+    CHARTS.plantaDlgXY = new Chart(document.getElementById("planta-dlg-chart-xy"), plantaChartConfig(xyLabels, xy, furos));
     CHARTS.plantaDlgZ = new Chart(document.getElementById("planta-dlg-chart-z"), plantaChartConfig(labels, z, furos));
   });
   return section;
@@ -871,6 +897,13 @@ function plantaParear(plano, holes, tf) {
     realized.push({ x: c.x, y: c.y, z: c.z, id });
   });
   const { matches, unmatchedR, unmatchedP } = matchPlanCollars(PLANEJADO.get(plano) || [], realized);
+  // Se quase todo collar realizado coincide com o previsto (< 1 mm), o ponto 'Hole' do DXF repete o previsto:
+  // o XY não mede desvio e fica marcado como sem dado confiável (em vez de 100%).
+  const exatos = matches.filter((m) => m.dxy < 0.001).length;
+  const xyDuvidoso = matches.length > 0 && exatos / matches.length >= 0.95;
+  matches.forEach((m) => { m.xyDuvidoso = xyDuvidoso; });
+  const profs = plantaProfundidadePorFuro(plano, tf);
+  matches.forEach((m) => { m.dprof = m.r.id != null && profs.has(m.r.id) ? profs.get(m.r.id) : null; });
   const ids = tf.active ? plantaVisibleIds(plano, tf) : null;
   const visivel = (r) => !ids || !r.id || ids.has(r.id);
   return {
@@ -884,7 +917,7 @@ function plantaParear(plano, holes, tf) {
 /* Itens desenhados de um plano pareado: ligações previsto × realizado, realizados sem previsto e previstos sem furo. */
 function plantaItensDoPlano(p) {
   const items = p.matches.map((m) => ({
-    kind: "match", plano: p.plano, id: m.r.id, p: m.p, r: m.r, dxy: m.dxy, dz: m.dz,
+    kind: "match", plano: p.plano, id: m.r.id, p: m.p, r: m.r, dxy: m.dxy, dprof: m.dprof, xyDuvidoso: m.xyDuvidoso,
   }));
   p.unmatchedR.forEach((r) => items.push({ kind: "realized", plano: p.plano, id: r.id, r }));
   p.unmatchedP.forEach((q) => items.push({ kind: "planned", plano: p.plano, p: q }));
@@ -900,7 +933,7 @@ async function drawPlanta() {
   const zLimite = document.getElementById("planta-z-limite");
   if (zLimite) zLimite.textContent = `±${fmtNum(plantaTolZ(), 2)} m`;
   if (subtitle) {
-    subtitle.textContent = `Dois mapas em planta do mesmo filtro: XY (deslocamento de até 2 × diâmetro projetado do furo) e Z (±${fmtNum(plantaTolZ(), 2)} m) · cada collar previsto é pareado ao realizado mais próximo (até ${fmtNum(COLLAR_MATCH_MAX, 1)} m).`;
+    subtitle.textContent = `Dois mapas em planta do mesmo filtro: XY (deslocamento de até 2 × diâmetro projetado do furo) e Z por desvio de profundidade do furo (±${fmtNum(plantaTolZ(), 2)} m) · cada collar previsto é pareado ao realizado mais próximo (até ${fmtNum(COLLAR_MATCH_MAX, 1)} m).`;
   }
   setupPlantaMap();
 
@@ -976,12 +1009,13 @@ async function drawPlanta() {
   const rows = planos.map((p) => ({ plano: p.plano, ...PLANTA_PLANS.get(p.plano) }));
   const all = plantaMetrics(planos.flatMap((p) => p.matches));
   const labels = [...rows.map((r) => r.plano), "TOTAL"];
+  const labelsXY = [...rows.map((r) => (r.xyPct == null ? `${r.plano} · XY s/ dado` : r.plano)), "TOTAL · XY com dado"];
   const furos = [...rows.map((r) => r.n), all.n];
-  PLANTA_CHART_DATA = { labels, xy: [...rows.map((r) => r.xyPct), all.xyPct], z: [...rows.map((r) => r.zPct), all.zPct], furos };
+  PLANTA_CHART_DATA = { labels, xyLabels: labelsXY, xy: [...rows.map((r) => r.xyPct), all.xyPct], z: [...rows.map((r) => r.zPct), all.zPct], furos };
   destroy("plantaXY");
   destroy("plantaZ");
   CHARTS.plantaXY = new Chart(document.getElementById("planta-chart-xy"),
-    plantaChartConfig(labels, [...rows.map((r) => r.xyPct), all.xyPct], furos));
+    plantaChartConfig(labelsXY, [...rows.map((r) => r.xyPct), all.xyPct], furos));
   CHARTS.plantaZ = new Chart(document.getElementById("planta-chart-z"),
     plantaChartConfig(labels, [...rows.map((r) => r.zPct), all.zPct], furos));
   if (charts) charts.hidden = false;
@@ -1144,13 +1178,13 @@ function buildPlantaExportCanvas(mode) {
   });
 
   if (PLANTA_CHART_DATA) {
-    const { labels, xy, z, furos } = PLANTA_CHART_DATA;
+    const { labels, xyLabels, xy, z, furos } = PLANTA_CHART_DATA;
     const specs = [
-      ["XY · furos com distância previsto × realizado dentro da tolerância XY", xy],
-      ["Z · furos com cota realizada dentro da tolerância Z", z],
+      ["XY · furos com distância previsto × realizado dentro da tolerância XY", xy, xyLabels],
+      ["Profundidade · furos com desvio dentro de ±" + fmtNum(plantaTolZ(), 2) + " m", z, labels],
     ];
     let y = chartsTop;
-    specs.forEach(([title, values]) => {
+    specs.forEach(([title, values, labs]) => {
       ctx.fillStyle = "#38424B";
       ctx.font = "700 14px Arial";
       ctx.fillText(title, M, y + 14);
@@ -1159,7 +1193,7 @@ function buildPlantaExportCanvas(mode) {
       const cv = document.createElement("canvas");
       holder.appendChild(cv);
       document.body.appendChild(holder);
-      const cfg = plantaChartConfig(labels, values, furos);
+      const cfg = plantaChartConfig(labs, values, furos);
       cfg.options.devicePixelRatio = DPR;
       cfg.options.animation = false;
       const chart = new Chart(cv, cfg);

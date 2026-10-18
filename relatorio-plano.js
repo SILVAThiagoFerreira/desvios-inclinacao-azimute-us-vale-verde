@@ -36,6 +36,7 @@ const RL = {
   LIMITE: 196,       // última posição útil antes do rodapé (tabela)
   RODAPE_Y: 204.6,   // filete do rodapé
   LINHA: 6.5, GRUPO_H: 6, SUB_H: 5.5,
+  GT: 54, GB: 190, GX: 16, GY: 12, CW: 149.85,  // grade de gráficos: início, fim, espaço entre colunas e linhas, largura de coluna
   TITULO: "#B5121B", PRETO: "#2B2B2B", TEXTO2: "#4D4D4D", CINZA: "#7A7A7A", CINZA_CLARO: "#8A9298",
   VERMELHO: "#B5121B", VERDE: "#2E7D32", AZUL_3D: "#1D2A9C",
   ZEBRA: "#F3F4F5", REGRA: "#C9CDD1", REGRA_CLARA: "#E3E6E9", BRANCO: "#FFFFFF",
@@ -209,8 +210,8 @@ function relatorioTexto(ops, x, y, w, texto, size, cor, bold = false) {
 /* Cabeçalho da lâmina, como no modelo: título e subtítulo à esquerda, logos à direita. */
 function relatorioCabecalho(ops, meta, titulo, sub) {
   const { M, W, LARGURA } = RL;
-  ops.push({ t: "text", s: relatorioCortar(titulo, 24, false, LARGURA - 90), x: M, y: 21, size: 24, c: RL.TITULO });
-  if (sub) ops.push({ t: "text", s: relatorioCortar(sub, 12, false, LARGURA), x: M, y: 28.5, size: 12, c: RL.TEXTO2 });
+  ops.push({ t: "text", s: relatorioCortar(titulo, 20, false, LARGURA - 90), x: M, y: 20, size: 20, c: RL.TITULO });
+  if (sub) ops.push({ t: "text", s: relatorioCortar(sub, 10, false, LARGURA), x: M, y: 27, size: 10, c: RL.TEXTO2 });
   const logos = meta.logos || {};
   let x = W - M;
   [logos.cliente, logos.enaex].forEach((logo) => {
@@ -375,8 +376,8 @@ function relatorioParametros(d) {
     { nome: `Ângulo frontal (${relTol.ang})`, curto: "ângulo", rotuloCard: "Conformidade · ângulo", total: m.angleTotal, ok: m.angleOk, pct: pv(m.anglePct) },
     { nome: `Azimute (${relTol.az})`, curto: "azimute", rotuloCard: "Conformidade · azimute", total: m.azTotal, ok: m.azOk, pct: pv(m.azPct) },
     { nome: `Profundidade (${relTol.z})`, curto: "profundidade", rotuloCard: "Conformidade · profundidade", total: m.zTotal, ok: m.zOk, pct: pv(m.zPct) },
-    { nome: `Collar em planta XY (${relTol.xy})`, curto: "collar em planta (XY)", rotuloCard: "Aderência · collar XY", total: pm ? pm.n : null, ok: pm ? pm.xy : null, pct: pm ? pv(pm.xyPct) : null },
-    { nome: `Cota do collar Z (${relTol.z})`, curto: "cota do collar (Z)", rotuloCard: "Aderência · collar Z", total: pm ? pm.n : null, ok: pm ? pm.z : null, pct: pm ? pv(pm.zPct) : null },
+    { nome: `Collar em planta XY (${relTol.xy})`, curto: "collar em planta (XY)", rotuloCard: "Aderência · collar XY", total: pm && pm.xyN ? pm.xyN : null, ok: pm ? pm.xy : null, pct: pm ? pv(pm.xyPct) : null },
+    { nome: `Planta Z · profundidade (${relTol.z})`, curto: "profundidade na planta (Z)", rotuloCard: "Aderência · planta Z", total: pm ? pm.zn : null, ok: pm ? pm.z : null, pct: pm ? pv(pm.zPct) : null },
   ];
 }
 
@@ -396,7 +397,9 @@ function relatorioPaginaConsolidado(ops, ctx) {
     k: p.rotuloCard,
     v: p.pct != null ? `${relatorioNum(p.pct, 1)}%` : "—",
     c: p.pct == null ? RL.CINZA : p.pct >= LIMITS.meta ? RL.VERDE : RL.VERMELHO,
-    dica: p.total != null ? `${fmtInt(p.ok)} de ${fmtInt(p.total)} furos · meta ${LIMITS.meta}%` : "Sem DXF do plano",
+    dica: p.pct == null
+      ? (p.total != null ? "sem dado confiável no DXF" : "Sem DXF do plano")
+      : `${fmtInt(p.ok)} de ${fmtInt(p.total)} furos · meta ${LIMITS.meta}%`,
   })));
   const yR = relatorioRotulo(ops, M, 111, LARGURA, "Conformidade por parâmetro");
   relatorioResumoTabela(ops, M, yR + 2, params, LARGURA);
@@ -436,29 +439,30 @@ function relatorioPaginaMapa3d(ops, ctx) {
 
 function relatorioPaginaPlantas(ops, ctx) {
   const { d } = ctx;
-  const { M, COL, TOPO } = RL;
-  const X2 = M + COL + 8;
-  const H1 = 80;
+  const { M, CW, GT, GY, GX, TOPO } = RL;
+  const X2 = M + CW + GX;
+  const H1 = 64;
   if (!d.plantaXY) {
     relatorioAviso(ops, M, TOPO, RL.LARGURA, 20, d.semDxf
       ? "Sem desenho DXF para o plano: a planta em XY e Z não pode ser desenhada."
       : "Coordenadas previstas indisponíveis para este plano: a planta não pode ser desenhada.");
     return;
   }
-  const yP = relatorioRotulo(ops, M, TOPO, COL, `Planta XY · collar previsto × realizado · tolerância ${relTol.xy}`);
-  ops.push({ t: "bmp", x: M, y: yP, w: COL, h: H1, c: d.plantaXY });
-  const yPZ = relatorioRotulo(ops, X2, TOPO, COL, `Planta Z · cota do collar · tolerância ${relTol.z}`);
-  ops.push({ t: "bmp", x: X2, y: yPZ, w: COL, h: H1, c: d.plantaZ });
-  const yG = yP + H1 + 8;
-  const yGb = relatorioRotulo(ops, M, yG, COL, `Aderência em planta por eixo (% dentro do limite) · ${relTol.meta}`);
-  ops.push({ t: "bmp", x: M, y: yGb, w: COL, h: 56, c: d.gPlanta });
-  const yT = relatorioRotulo(ops, X2, yG, COL, "Tolerâncias e legenda");
+  const semXY = d.pm && d.pm.xyPct == null ? " · sem dado confiável" : "";
+  const yP = relatorioRotulo(ops, M, GT, CW, `Planta XY · tolerância ${relTol.xy}${semXY}`);
+  ops.push({ t: "bmp", x: M, y: yP, w: CW, h: H1, c: d.plantaXY });
+  const yPZ = relatorioRotulo(ops, X2, GT, CW, `Planta Z · profundidade · tolerância ${relTol.z}`);
+  ops.push({ t: "bmp", x: X2, y: yPZ, w: CW, h: H1, c: d.plantaZ });
+  const yG = yP + H1 + GY;
+  const yGb = relatorioRotulo(ops, M, yG, CW, `Aderência em planta por eixo (% dentro do limite) · ${relTol.meta}`);
+  ops.push({ t: "bmp", x: M, y: yGb, w: CW, h: 48, c: d.gPlanta });
+  const yT = relatorioRotulo(ops, X2, yG, CW, "Tolerâncias e legenda");
   let yy = yT + 3;
-  [`Collar XY: ${relTol.xy}`, `Collar Z: ${relTol.z}`, `Meta de aderência: ${relTol.meta}`].forEach((t) => {
+  [`Collar XY: ${relTol.xy}`, `Profundidade: ${relTol.z}`, `Meta de aderência: ${relTol.meta}`].forEach((t) => {
     ops.push({ t: "text", s: t, x: X2, y: yy, size: 9, c: RL.PRETO });
-    yy += 6;
+    yy += 5.2;
   });
-  yy += 2;
+  yy += 1.5;
   [
     { t: "dot", c: PLANTA_COLORS.ok, texto: "Dentro da tolerância" },
     { t: "dot", c: PLANTA_COLORS.red, texto: "Fora da tolerância" },
@@ -467,46 +471,46 @@ function relatorioPaginaPlantas(ops, ctx) {
     { t: "link", c: "#9AA2A9", texto: "Ligação previsto × realizado" },
   ].forEach((it) => {
     relatorioLegenda(ops, X2, yy, [it]);
-    yy += 6;
+    yy += 5.2;
   });
 }
 
 function relatorioPaginaAngulo(ops, ctx) {
   const { d } = ctx;
-  const { M, COL, TOPO } = RL;
-  const X2 = M + COL + 8;
-  const H = 146;
-  const yA = relatorioRotulo(ops, M, TOPO, COL, `Ângulo frontal por furo (°) · faixa ${relTol.ang}`);
-  ops.push({ t: "bmp", x: M, y: yA, w: COL, h: H, c: d.g.angulo });
-  const yD = relatorioRotulo(ops, X2, TOPO, COL, `Direção dos furos · tolerância Δaz ${relTol.az} × Δprof ${relTol.z}`);
-  ops.push({ t: "bmp", x: X2, y: yD, w: COL, h: H, c: d.g.direcao });
+  const { M, CW, GT, GX } = RL;
+  const X2 = M + CW + GX;
+  const H = 128;
+  const yA = relatorioRotulo(ops, M, GT, CW, `Ângulo frontal por furo (°) · faixa ${relTol.ang}`);
+  ops.push({ t: "bmp", x: M, y: yA, w: CW, h: H, c: d.g.angulo });
+  const yD = relatorioRotulo(ops, X2, GT, CW, `Direção dos furos · tolerância az ${relTol.az} × prof ${relTol.z}`);
+  ops.push({ t: "bmp", x: X2, y: yD, w: CW, h: H, c: d.g.direcao });
 }
 
 function relatorioPaginaDesvios(ops, ctx) {
   const { d } = ctx;
-  const { M, COL, TOPO } = RL;
-  const X2 = M + COL + 8;
-  const H = 146;
-  const yA = relatorioRotulo(ops, M, TOPO, COL, `Desvio de azimute por furo (°) · tolerância ${relTol.az}`);
-  ops.push({ t: "bmp", x: M, y: yA, w: COL, h: H, c: d.g.desvioAz });
-  const yB = relatorioRotulo(ops, X2, TOPO, COL, `Desvio de profundidade por furo (m) · tolerância ${relTol.z}`);
-  ops.push({ t: "bmp", x: X2, y: yB, w: COL, h: H, c: d.g.desvioZ });
+  const { M, CW, GT, GX } = RL;
+  const X2 = M + CW + GX;
+  const H = 128;
+  const yA = relatorioRotulo(ops, M, GT, CW, `Desvio de azimute por furo (°) · tolerância ${relTol.az}`);
+  ops.push({ t: "bmp", x: M, y: yA, w: CW, h: H, c: d.g.desvioAz });
+  const yB = relatorioRotulo(ops, X2, GT, CW, `Desvio de profundidade por furo (m) · tolerância ${relTol.z}`);
+  ops.push({ t: "bmp", x: X2, y: yB, w: CW, h: H, c: d.g.desvioZ });
 }
 
 function relatorioPaginaDistribuicoes(ops, ctx) {
   const { d } = ctx;
-  const { M, COL, TOPO } = RL;
-  const X2 = M + COL + 8;
-  const H1 = 80, H2 = 56;
-  const yA = relatorioRotulo(ops, M, TOPO, COL, `Distribuição do desvio de azimute · tolerância ${relTol.az}`);
-  ops.push({ t: "bmp", x: M, y: yA, w: COL, h: H1, c: d.g.histAz });
-  const yB = relatorioRotulo(ops, X2, TOPO, COL, `Distribuição do desvio de profundidade · tolerância ${relTol.z}`);
-  ops.push({ t: "bmp", x: X2, y: yB, w: COL, h: H1, c: d.g.histZ });
-  const yR = yA + H1 + 8;
-  const yC = relatorioRotulo(ops, M, yR, COL, `Distribuição do ângulo frontal · faixa ${relTol.ang}`);
-  ops.push({ t: "bmp", x: M, y: yC, w: COL, h: H2, c: d.g.histAngulo });
-  const yD = relatorioRotulo(ops, X2, yR, COL, `Aderência por parâmetro (%) · ${relTol.meta}`);
-  ops.push({ t: "bmp", x: X2, y: yD, w: COL, h: H2, c: d.g.porPlano });
+  const { M, CW, GT, GY, GX } = RL;
+  const X2 = M + CW + GX;
+  const H1 = 58, H2 = 54;
+  const yA = relatorioRotulo(ops, M, GT, CW, `Distribuição do desvio de azimute · tolerância ${relTol.az}`);
+  ops.push({ t: "bmp", x: M, y: yA, w: CW, h: H1, c: d.g.histAz });
+  const yB = relatorioRotulo(ops, X2, GT, CW, `Distribuição do desvio de profundidade · tolerância ${relTol.z}`);
+  ops.push({ t: "bmp", x: X2, y: yB, w: CW, h: H1, c: d.g.histZ });
+  const yR = yA + H1 + GY;
+  const yC = relatorioRotulo(ops, M, yR, CW, `Distribuição do ângulo frontal · faixa ${relTol.ang}`);
+  ops.push({ t: "bmp", x: M, y: yC, w: CW, h: H2, c: d.g.histAngulo });
+  const yD = relatorioRotulo(ops, X2, yR, CW, `Aderência por parâmetro (%) · ${relTol.meta}`);
+  ops.push({ t: "bmp", x: X2, y: yD, w: CW, h: H2, c: d.g.porPlano });
 }
 
 /* Tabela dos furos fora da tolerância, paginada (o cabeçalho se repete em cada lâmina). */
@@ -542,7 +546,7 @@ function relatorioMontar(meta, res, d) {
   relatorioPaginaConsolidado(nova("DESVIOS DE PERFURAÇÃO", meta.plano), ctx);
   relatorioPaginaMapa(nova("MAPA DE EXECUÇÃO", "Planejado × executado, com o emboque de cada furo do período"), ctx);
   relatorioPaginaMapa3d(nova("MAPA 3D DE EXECUÇÃO", meta.plano), ctx);
-  relatorioPaginaPlantas(nova("ADERÊNCIA EM PLANTA", "Collar previsto × realizado, em planta (XY) e em cota (Z)"), ctx);
+  relatorioPaginaPlantas(nova("ADERÊNCIA EM PLANTA", "Collar previsto × realizado em planta (XY) e desvio de profundidade por furo (Z)"), ctx);
   relatorioPaginaAngulo(nova("ÂNGULO FRONTAL E DIREÇÃO", "Inclinação executada de cada furo e posição em relação ao previsto"), ctx);
   relatorioPaginaDesvios(nova("AZIMUTE E PROFUNDIDADE POR FURO", "Desvio executado menos previsto, em cada furo do período"), ctx);
   relatorioPaginaDistribuicoes(nova("DISTRIBUIÇÕES E ADERÊNCIA POR PLANO", "Quantidade de furos por faixa de desvio e aderência do plano"), ctx);
@@ -583,6 +587,37 @@ function relatorioGrafico(w, h, desenhar) {
   }
 }
 
+/* Rótulo "0,0%" em barras de valor zero (a barra some, mas o valor precisa aparecer). */
+Chart.register({
+  id: "relZeroLabel",
+  afterDatasetsDraw(chart, _args, opts) {
+    if (!opts || !opts.fmt) return;
+    const { ctx } = chart;
+    chart.data.datasets.forEach((ds, di) => {
+      const meta = chart.getDatasetMeta(di);
+      if (meta.hidden) return;
+      meta.data.forEach((bar, i) => {
+        if (ds.data[i] !== 0) return;
+        ctx.save();
+        ctx.font = "700 11px Arial, Helvetica, sans-serif";
+        ctx.fillStyle = C.ink;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        ctx.fillText(opts.fmt(0), bar.x, bar.base - 3);
+        ctx.restore();
+      });
+    });
+  },
+});
+
+/* Eixo com folga para a faixa de tolerância (±lim) aparecer mesmo quando os dados ficam de um lado só. */
+function relatorioAjustarFaixa(chart, lim) {
+  if (!chart) return;
+  chart.options.scales.y.suggestedMin = -lim * 1.5;
+  chart.options.scales.y.suggestedMax = lim * 1.5;
+  chart.update("none");
+}
+
 /* Ajusta um gráfico de barras já desenhado para o bloco do relatório: barras mais finas e eixo X horizontal. */
 function relatorioAjustarBarras(chart) {
   if (!chart) return;
@@ -590,6 +625,7 @@ function relatorioAjustarBarras(chart) {
   chart.options.scales.x.ticks.maxRotation = 0;
   chart.options.scales.x.ticks.minRotation = 0;
   chart.options.scales.y.ticks.stepSize = 20;
+  chart.options.plugins.relZeroLabel = { fmt: (v) => fmtPct(v) };
   chart.update("none");
 }
 
@@ -599,7 +635,7 @@ function relatorioPlantaChart(cv, key, pm) {
   CHARTS[key] = new Chart(cv, aplicarAlvo({
     type: "bar",
     data: {
-      labels: ["Collar XY", "Collar Z"],
+      labels: [pm.xyPct == null ? "Planta XY · sem dado" : "Planta XY", "Planta Z"],
       datasets: [{
         label: "Aderência", data: [pv(pm.xyPct), pv(pm.zPct)],
         backgroundColor: PLANTA_COLORS.green, borderWidth: 0, barPercentage: 0.5, categoryPercentage: 0.7,
@@ -724,14 +760,20 @@ async function relatorioColetar(plano) {
   const hs = histogramas(registros);
 
   const g = {
-    angulo: relatorioGrafico(RL.COL, 146, (cv, key) => drawAngle(registros, { canvas: cv, key, dpr })),
-    direcao: relatorioGrafico(RL.COL, 146, (cv, key) => drawDirection(registros, { canvas: cv, key, dpr })),
-    histAngulo: relatorioGrafico(RL.COL, 56, (cv, key) => drawHist("", hs.angle.valores, { ...hs.angle.opts, canvas: cv, key, dpr })),
-    desvioAz: relatorioGrafico(RL.COL, 146, (cv, key) => drawAzByHole(registros, { canvas: cv, key, dpr })),
-    desvioZ: relatorioGrafico(RL.COL, 146, (cv, key) => drawDepthByHole(registros, { canvas: cv, key, dpr })),
-    histAz: relatorioGrafico(RL.COL, 80, (cv, key) => drawHist("", hs.az.valores, { ...hs.az.opts, canvas: cv, key, dpr })),
-    histZ: relatorioGrafico(RL.COL, 80, (cv, key) => drawHist("", hs.depth.valores, { ...hs.depth.opts, canvas: cv, key, dpr })),
-    porPlano: relatorioGrafico(RL.COL, 56, (cv, key) => {
+    angulo: relatorioGrafico(RL.CW, 128, (cv, key) => drawAngle(registros, { canvas: cv, key, dpr })),
+    direcao: relatorioGrafico(RL.CW, 128, (cv, key) => drawDirection(registros, { canvas: cv, key, dpr })),
+    histAngulo: relatorioGrafico(RL.CW, 54, (cv, key) => drawHist("", hs.angle.valores, { ...hs.angle.opts, canvas: cv, key, dpr })),
+    desvioAz: relatorioGrafico(RL.CW, 128, (cv, key) => {
+      drawAzByHole(registros, { canvas: cv, key, dpr });
+      relatorioAjustarFaixa(CHARTS[key], LIMITS.azimuth);
+    }),
+    desvioZ: relatorioGrafico(RL.CW, 128, (cv, key) => {
+      drawDepthByHole(registros, { canvas: cv, key, dpr });
+      relatorioAjustarFaixa(CHARTS[key], LIMITS.depth);
+    }),
+    histAz: relatorioGrafico(RL.CW, 58, (cv, key) => drawHist("", hs.az.valores, { ...hs.az.opts, canvas: cv, key, dpr })),
+    histZ: relatorioGrafico(RL.CW, 58, (cv, key) => drawHist("", hs.depth.valores, { ...hs.depth.opts, canvas: cv, key, dpr })),
+    porPlano: relatorioGrafico(RL.CW, 54, (cv, key) => {
       drawByPlan(registros, { canvas: cv, key, dpr });
       relatorioAjustarBarras(CHARTS[key]);
     }),
@@ -751,9 +793,9 @@ async function relatorioColetar(plano) {
     gPlanta: null,
   };
   if (planta) {
-    d.plantaXY = relatorioImagemPlanta(planta, "xy", RL.COL, 80);
-    d.plantaZ = relatorioImagemPlanta(planta, "z", RL.COL, 80);
-    d.gPlanta = relatorioGrafico(RL.COL, 56, (cv, key) => relatorioPlantaChart(cv, key, pm));
+    d.plantaXY = relatorioImagemPlanta(planta, "xy", RL.CW, 64);
+    d.plantaZ = relatorioImagemPlanta(planta, "z", RL.CW, 64);
+    d.gPlanta = relatorioGrafico(RL.CW, 48, (cv, key) => relatorioPlantaChart(cv, key, pm));
   }
   return d;
 }

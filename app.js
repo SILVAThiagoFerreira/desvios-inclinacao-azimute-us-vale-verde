@@ -936,7 +936,7 @@ function drawByPlan(data, alvo = {}) {
       datasets: [
         { label: "Ângulo", data: anglePct, backgroundColor: C.ink, borderWidth: 0 },
         { label: "Azimute", data: azPct, backgroundColor: C.red, borderWidth: 0 },
-        { label: "Profundidade Medida (m)", data: zPct, backgroundColor: "rgba(56,66,75,0.45)", borderWidth: 0 },
+        { label: "Profundidade", data: zPct, backgroundColor: "rgba(56,66,75,0.45)", borderWidth: 0 },
       ],
     },
     options: {
@@ -1030,12 +1030,8 @@ function drawHist(canvasId, values, opts = {}) {
         tooltip: { callbacks: { label: (c) => `${c.raw} furo(s)`, title: (t) => `Faixa: ${t[0].label}${unit}` } },
         valueLabels: { display: true, formatter: (value) => fmtInt(value), minFontSize: 7 },
         limitLines: {
-          xLines: marks.map((m) => {
-            // Chart.js "category" scale uses index; find closest bin center
-            let bestIdx = 0, bestDist = Infinity;
-            labels.forEach((v, i) => { const d = Math.abs(v - m); if (d < bestDist) { bestDist = d; bestIdx = i; } });
-            return bestIdx;
-          }),
+          // Posição exata do limite no eixo de faixas: índice fracionário (centro da faixa i = i + 0,5 faixas)
+          xLines: marks.map((m) => (m - min) / step - 0.5),
           color: C.red, dash: [5, 4],
         },
       },
