@@ -1387,3 +1387,58 @@ body {
   .page-head__actions > * { flex: 1 1 auto; text-align: center; }
   #relatorio-open { align-self: stretch; }
 }
+
+/* =====================================================================
+   Visual limpo (padrão relatório Enaex): fundo branco, sem caixas
+   aninhadas, sombras ou gradientes; título vermelho em caixa alta com
+   peso fino; subtítulo cinza; seções com filete fino.
+   ===================================================================== */
+:root {
+  --ink: #3C3F44;
+  --ink-2: #4a4a4a;
+  --ink-soft: #4a4a4a;
+  --muted: #8A8F96;
+  --ink-muted: #8A8F96;
+  --faint: #C4C7CC;
+  --bg: #ffffff;
+  --canvas: #ffffff;
+  --surface: #ffffff;
+  --surface-muted: #ffffff;
+  --rule: #e5e5e5;
+  --rule-soft: #f5f5f5;
+  --line: #e5e5e5;
+  --red: #B5121B;
+  --red-deep: #B5121B;
+  --red-soft: rgba(181, 18, 27, 0.08);
+  --topbar: #3C3F44;
+  --topbar-accent: #B5121B;
+  --shadow: none;
+}
+body { background: #ffffff; }
+.topbar { border-bottom-width: 1px; border-bottom-color: var(--topbar-accent); }
+.eyebrow { display: none; }
+.page-subtitle { margin: 0 0 6px; color: var(--ink-2); font-size: 16px; font-weight: 400; line-height: 1.35; }
+.page-head h1 { font-size: 32px; font-weight: 400; letter-spacing: 0.01em; line-height: 1.15; }
+
+.filter-panel, .control-panel, .kpi, .chart-block, .filter select, .filter-reset, .chip, .topbar__button {
+  box-shadow: none;
+}
+.filter-panel, .control-panel, .chart-block { background: none; border-radius: 0; }
+.filter-panel { padding: 0 0 12px; margin-bottom: 8px; border-bottom: 1px solid var(--rule); }
+.control-panel { padding: 0 0 14px; margin-bottom: 14px; border-bottom: 1px solid var(--rule); }
+.control-panel__title { color: var(--ink-muted); font-weight: 400; }
+.control { border-left: 0; padding: 0; }
+.control__k { color: var(--ink-2); font-weight: 400; }
+.control__v { font-weight: 400; font-size: 20px; }
+.control__s { color: var(--ink-muted); }
+
+.kpi { background: none; border-radius: 0; padding: 6px 0; }
+.kpi__label { color: var(--ink-muted); font-weight: 400; letter-spacing: 0; text-transform: none; font-size: 12px; }
+.kpi__value { font-weight: 400; font-size: 28px; letter-spacing: 0; }
+.kpi__sub { color: var(--ink-muted); }
+
+.chart-block { padding: 18px 0 12px; }
+.chart-block__head { border-bottom: 1px solid var(--rule); padding-bottom: 8px; margin-bottom: 14px; }
+.chart-block__head h2 { font-size: 20px; font-weight: 400; letter-spacing: 0; color: var(--ink-2); }
+
+.relatorio-open-btn, .relatorio-export { box-shadow: none; }

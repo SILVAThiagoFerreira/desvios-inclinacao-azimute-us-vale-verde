@@ -37,9 +37,9 @@ const RL = {
   RODAPE_Y: 204.6,   // filete do rodapé
   LINHA: 6.5, GRUPO_H: 6, SUB_H: 5.5,
   GT: 54, GB: 190, GX: 16, GY: 12, CW: 149.85,  // grade de gráficos: início, fim, espaço entre colunas e linhas, largura de coluna
-  TITULO: "#B5121B", PRETO: "#2B2B2B", TEXTO2: "#4D4D4D", CINZA: "#7A7A7A", CINZA_CLARO: "#8A9298",
+  TITULO: "#B5121B", PRETO: "#3C3F44", TEXTO2: "#4A4A4A", CINZA: "#8A8F96", CINZA_CLARO: "#8A8F96",
   VERMELHO: "#B5121B", VERDE: "#2E7D32", AZUL_3D: "#1D2A9C",
-  ZEBRA: "#F3F4F5", REGRA: "#C9CDD1", REGRA_CLARA: "#E3E6E9", BRANCO: "#FFFFFF",
+  ZEBRA: "#F5F5F5", REGRA: "#E5E5E5", REGRA_CLARA: "#E5E5E5", BRANCO: "#FFFFFF",
 };
 
 // Colunas da tabela. "grupo" agrupa o cabeçalho; "criterio" marca a célula em vermelho quando fora do limite.
