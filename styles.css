@@ -1410,12 +1410,16 @@ body {
   --red: #B5121B;
   --red-deep: #B5121B;
   --red-soft: rgba(181, 18, 27, 0.08);
-  --topbar: #3C3F44;
-  --topbar-accent: #B5121B;
+  --topbar: #38424B;
+  --topbar-accent: #E20613;
   --shadow: none;
 }
 body { background: #ffffff; }
-.topbar { border-bottom-width: 1px; border-bottom-color: var(--topbar-accent); }
+.topbar { height: 54px; padding: 0 32px 0 44px; border-bottom: 4px solid var(--topbar-accent); }
+.topbar__logo { height: 28px; }
+.topbar__title { font-size: 23px; font-weight: 700; letter-spacing: -0.02em; }
+.topbar__unit { color: #ffffff94; font-size: 10px; font-weight: 600; letter-spacing: 0.12em; }
+@media (max-width: 560px) { .topbar { padding: 0 16px; } .topbar__title { font-size: 12px; } }
 .eyebrow { display: none; }
 .page-subtitle { margin: 0 0 6px; color: var(--ink-2); font-size: 16px; font-weight: 400; line-height: 1.35; }
 .page-head h1 { font-size: 32px; font-weight: 400; letter-spacing: 0.01em; line-height: 1.15; }
