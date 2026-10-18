@@ -960,12 +960,11 @@ function relatorioCarregarLogos() {
   return RELATORIO_LOGOS_PROMISE;
 }
 
+// Nome do arquivo exportado (PDF e PNG): "RT - DESVIOS DE PERFURAÇÃO - <PLANO>.ext".
+// Remove só os caracteres que o Windows não aceita em nome de arquivo.
 function relatorioNomeArquivo(plano, ext) {
-  const slug = plano.normalize("NFD").replace(/[̀-ͯ]/g, "")
-    .replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "plano";
-  const d = new Date();
-  const data = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  return `relatorio-desvios_${slug}_${data}.${ext}`;
+  const cod = String(plano || "plano").replace(/[\\/:*?"<>|]+/g, "-").trim() || "plano";
+  return `RT - DESVIOS DE PERFURAÇÃO - ${cod}.${ext}`;
 }
 
 async function exportarRelatorioPdf(meta, pages) {
