@@ -7,9 +7,15 @@
   <link rel="icon" type="image/png" href="./assets/enaex-favicon.png">
   <meta name="description" content="Análise de desvios de inclinação, azimute e profundidade dos furos de perfuração — US Vale Verde.">
   <link rel="preconnect" href="https://docs.google.com">
-  <link rel="stylesheet" href="./styles.css?v=33">
+  <link rel="stylesheet" href="./styles.css?v=34">
 </head>
 <body>
+  <header class="topbar">
+    <img class="topbar__logo" src="./assets/enaex-logo-white.png" alt="ENAEX">
+    <span class="topbar__title">Desvios de Perfuração</span>
+    <span class="topbar__unit">US VALE VERDE</span>
+  </header>
+  <div class="layout">
   <aside class="sidebar" aria-label="Navegação e ações">
     <nav class="sidebar__nav">
       <button id="sb-home" type="button" class="sb-btn is-active" title="Início" aria-label="Início">
@@ -39,11 +45,7 @@
       <span id="sb-status-dot" class="sb-dot" data-state="loading" title="Estado dos dados" aria-label="Estado dos dados"></span>
     </div>
   </aside>
-  <header class="topbar">
-    <img class="topbar__logo" src="./assets/enaex-logo-white.png" alt="ENAEX">
-    <span class="topbar__title">Desvios de Perfuração</span>
-    <span class="topbar__unit">US VALE VERDE</span>
-  </header>
+    <div class="layout__main">
 
   <main class="page">
     <section class="page-head">
@@ -460,6 +462,8 @@
       </div>
     </section>
   </main>
+    </div>
+  </div>
 
   <dialog id="planta-dialog" class="planta-dialog" aria-labelledby="planta-dialog-title">
     <div class="planta-dialog__head">
@@ -522,7 +526,7 @@
   <script type="module" src="./map3d.js?v=14"></script>
   <script src="./planta.js?v=21"></script>
   <script src="./relatorio-plano.js?v=18"></script>
-  <script src="./app.js?v=26"></script>
+  <script src="./app.js?v=27"></script>
   <script src="./excel-export-v2.js?v=5"></script>
 </body>
 </html>

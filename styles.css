@@ -1456,14 +1456,19 @@ body { background: #ffffff; }
   --sb-hot: #e30613;
   --sb-hot-bg: rgba(227, 6, 19, 0.16);
 }
-body { padding-left: var(--sb-w); }
+.layout {
+  display: flex;
+  align-items: flex-start;
+  min-height: calc(100vh - 46px);
+}
+.layout__main { flex: 1 1 auto; min-width: 0; }
 
 .sidebar {
-  position: fixed;
+  position: sticky;
   top: 0;
-  left: 0;
-  bottom: 0;
+  flex: 0 0 var(--sb-w);
   width: var(--sb-w);
+  height: 100vh;
   z-index: 200;
   display: flex;
   flex-direction: column;
@@ -1560,10 +1565,15 @@ body { padding-left: var(--sb-w); }
 
 /* Telas estreitas: a barra vira faixa inferior, sem rolagem horizontal */
 @media (max-width: 700px) {
-  body { padding-left: 0; padding-bottom: 60px; }
+  body { padding-bottom: 60px; }
+  .layout { display: block; min-height: 0; }
   .sidebar {
+    position: fixed;
     top: auto;
+    left: 0;
     right: 0;
+    bottom: 0;
+    flex: none;
     width: auto;
     height: 58px;
     flex-direction: row;
