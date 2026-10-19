@@ -86,6 +86,12 @@ function setStatus(kind, text) {
   el.classList.remove("is-loading", "is-ok", "is-error");
   if (kind) el.classList.add("is-" + kind);
   document.getElementById("status-text").textContent = text;
+  const dot = document.getElementById("sb-status-dot");
+  if (dot) {
+    const state = kind || "ok";
+    dot.dataset.state = state;
+    dot.title = state === "ok" ? "Dados carregados" : state === "error" ? "Erro ao carregar os dados" : "Carregando dados";
+  }
 }
 
 /* ===================== Carregamento ===================== */
@@ -447,14 +453,17 @@ function populateFilters() {
   ["filter-year", "filter-month", "filter-plan"].forEach((id) => {
     document.getElementById(id).onchange = () => {
       refreshDependentOptions();
+      syncSidebarPeriod();
       render();
     };
   });
   document.getElementById("filter-reset").onclick = () => {
     ["filter-year", "filter-month", "filter-plan"].forEach((id) => (document.getElementById(id).value = ""));
     refreshDependentOptions();
+    syncSidebarPeriod();
     render();
   };
+  syncSidebarPeriod();
 }
 
 function filtered() {
@@ -2082,7 +2091,66 @@ function niceStep(raw) {
   return step * pow;
 }
 
+/* ===================== Barra lateral ===================== */
+/* Os botões da barra delegam para os controles originais (mesmos ids e handlers). */
+function setupSidebar() {
+  const $ = (id) => document.getElementById(id);
+  const delegate = (sbId, targetId) => {
+    const sb = $(sbId);
+    if (sb) sb.addEventListener("click", () => $(targetId)?.click());
+  };
+  delegate("sb-report", "relatorio-open");
+  delegate("sb-export", "export-xlsx");
+  delegate("sb-clear", "filter-reset");
+
+  // Espelha o estado desabilitado dos botões originais (ex.: relatório sem plano, Excel em geração)
+  const mirrorDisabled = () => {
+    ["relatorio-open", "export-xlsx"].forEach((origId) => {
+      const sb = $(origId === "relatorio-open" ? "sb-report" : "sb-export");
+      if (sb) sb.disabled = !!$(origId)?.disabled;
+    });
+  };
+  ["relatorio-open", "export-xlsx"].forEach((origId) => {
+    const orig = $(origId);
+    if (orig) new MutationObserver(mirrorDisabled).observe(orig, { attributes: true, attributeFilter: ["disabled"] });
+  });
+  mirrorDisabled();
+
+  $("sb-home")?.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+
+  const filterPanel = document.querySelector(".filter-panel");
+  const filterBtn = $("sb-filter");
+  filterBtn?.addEventListener("click", () => {
+    if (!filterPanel) return;
+    const open = filterPanel.hidden;
+    filterPanel.hidden = !open;
+    filterBtn.setAttribute("aria-expanded", String(open));
+    filterBtn.classList.toggle("is-active", open);
+  });
+
+  $("sb-calendar")?.addEventListener("click", () => {
+    if (filterPanel?.hidden) {
+      filterPanel.hidden = false;
+      filterBtn?.setAttribute("aria-expanded", "true");
+      filterBtn?.classList.add("is-active");
+    }
+    filterPanel?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setTimeout(() => $("filter-year")?.focus({ preventScroll: true }), 250);
+  });
+
+  $("sb-refresh")?.addEventListener("click", () => window.location.reload());
+
+  syncSidebarPeriod();
+}
+
+/* Ícone de período fica em destaque quando ano ou mês estão selecionados */
+function syncSidebarPeriod() {
+  const active = !!(document.getElementById("filter-year")?.value || document.getElementById("filter-month")?.value);
+  document.getElementById("sb-calendar")?.classList.toggle("is-active", active);
+}
+
 /* ===================== Boot ===================== */
+setupSidebar();
 setupParamsEditor();
 loadSheet()
   .then(() => startDxfAutoRefresh())

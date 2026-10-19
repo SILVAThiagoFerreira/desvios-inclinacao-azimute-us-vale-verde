@@ -7,9 +7,38 @@
   <link rel="icon" type="image/png" href="./assets/enaex-favicon.png">
   <meta name="description" content="Análise de desvios de inclinação, azimute e profundidade dos furos de perfuração — US Vale Verde.">
   <link rel="preconnect" href="https://docs.google.com">
-  <link rel="stylesheet" href="./styles.css?v=32">
+  <link rel="stylesheet" href="./styles.css?v=33">
 </head>
 <body>
+  <aside class="sidebar" aria-label="Navegação e ações">
+    <nav class="sidebar__nav">
+      <button id="sb-home" type="button" class="sb-btn is-active" title="Início" aria-label="Início">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5h4v5"/></svg>
+      </button>
+      <button id="sb-filter" type="button" class="sb-btn" title="Mostrar ou ocultar filtros" aria-label="Mostrar ou ocultar filtros" aria-controls="filter-panel" aria-expanded="true">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4.5h18l-7 8.5v6l-4 2v-8z"/></svg>
+      </button>
+      <button id="sb-calendar" type="button" class="sb-btn" title="Período: ano e mês" aria-label="Período: ano e mês">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>
+      </button>
+      <button id="sb-clear" type="button" class="sb-btn" title="Limpar filtros" aria-label="Limpar filtros">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4.5h12l-4.5 5.5v5l-3 1.5V10z"/><path d="M16.5 13.5l5 5M21.5 13.5l-5 5"/></svg>
+      </button>
+      <span class="sb-divider" aria-hidden="true"></span>
+      <button id="sb-refresh" type="button" class="sb-btn" title="Atualizar dados" aria-label="Atualizar dados">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.3-4.6L4 9"/><path d="M4 4v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.6L20 15"/><path d="M20 20v-5h-5"/></svg>
+      </button>
+      <button id="sb-report" type="button" class="sb-btn" title="Relatório por plano (PDF ou imagem)" aria-label="Relatório por plano (PDF ou imagem)" disabled>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3v5h5"/><path d="M9 17v-4M12 17v-6.5M15 17v-2.5"/></svg>
+      </button>
+      <button id="sb-export" type="button" class="sb-btn" title="Exportar dados filtrados para Excel" aria-label="Exportar dados filtrados para Excel">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5.5" rx="7.5" ry="2.5"/><path d="M4.5 5.5v5.5c0 1.4 3.4 2.5 7.5 2.5"/><path d="M19.5 5.5v3"/><path d="M4.5 11v5.5c0 1.2 2.4 2.2 5.3 2.4"/><path d="M17 13.5v6.5m0 0-2.6-2.6M17 20l2.6-2.6"/></svg>
+      </button>
+    </nav>
+    <div class="sidebar__foot">
+      <span id="sb-status-dot" class="sb-dot" data-state="loading" title="Estado dos dados" aria-label="Estado dos dados"></span>
+    </div>
+  </aside>
   <header class="topbar">
     <img class="topbar__logo" src="./assets/enaex-logo-white.png" alt="ENAEX">
     <span class="topbar__title">Desvios de Perfuração</span>
@@ -493,7 +522,7 @@
   <script type="module" src="./map3d.js?v=14"></script>
   <script src="./planta.js?v=21"></script>
   <script src="./relatorio-plano.js?v=18"></script>
-  <script src="./app.js?v=25"></script>
+  <script src="./app.js?v=26"></script>
   <script src="./excel-export-v2.js?v=5"></script>
 </body>
 </html>
