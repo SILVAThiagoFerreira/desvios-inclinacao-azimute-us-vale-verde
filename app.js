@@ -2092,6 +2092,61 @@ function niceStep(raw) {
 }
 
 /* ===================== Barra lateral ===================== */
+/* Popover de filtros: abre ao lado do botão de funil (ou como folha inferior no celular) */
+function setupFilterPopover() {
+  const $ = (id) => document.getElementById(id);
+  const panel = $("filter-panel");
+  const funnel = $("sb-filter");
+  const calendar = $("sb-calendar");
+  const sidebar = document.querySelector(".sidebar");
+  if (!panel || !funnel) return;
+
+  const position = () => {
+    if (window.matchMedia("(max-width: 700px)").matches) {
+      panel.style.left = "";
+      panel.style.top = "";
+      return;
+    }
+    const sb = sidebar ? sidebar.getBoundingClientRect() : { right: 60 };
+    const btn = funnel.getBoundingClientRect();
+    panel.style.left = Math.round(sb.right + 8) + "px";
+    panel.style.top = Math.max(8, Math.round(btn.top)) + "px";
+  };
+  const isOpen = () => !panel.hidden;
+  const open = () => {
+    panel.hidden = false;
+    funnel.classList.add("is-active");
+    funnel.setAttribute("aria-expanded", "true");
+    position();
+  };
+  const close = () => {
+    panel.hidden = true;
+    funnel.classList.remove("is-active");
+    funnel.setAttribute("aria-expanded", "false");
+  };
+
+  funnel.addEventListener("click", () => (isOpen() ? close() : open()));
+  calendar?.addEventListener("click", () => {
+    if (!isOpen()) open();
+    setTimeout(() => $("filter-year")?.focus({ preventScroll: true }), 50);
+  });
+  $("filter-panel-close")?.addEventListener("click", close);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && isOpen()) {
+      close();
+      funnel.focus();
+    }
+  });
+  document.addEventListener("mousedown", (e) => {
+    if (!isOpen()) return;
+    if (panel.contains(e.target) || funnel.contains(e.target) || calendar?.contains(e.target)) return;
+    close();
+  });
+  window.addEventListener("resize", () => isOpen() && position());
+  window.addEventListener("scroll", () => isOpen() && position(), { passive: true });
+}
+
+
 /* Os botões da barra delegam para os controles originais (mesmos ids e handlers). */
 function setupSidebar() {
   const $ = (id) => document.getElementById(id);
@@ -2118,25 +2173,7 @@ function setupSidebar() {
 
   $("sb-home")?.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
 
-  const filterPanel = document.querySelector(".filter-panel");
-  const filterBtn = $("sb-filter");
-  filterBtn?.addEventListener("click", () => {
-    if (!filterPanel) return;
-    const open = filterPanel.hidden;
-    filterPanel.hidden = !open;
-    filterBtn.setAttribute("aria-expanded", String(open));
-    filterBtn.classList.toggle("is-active", open);
-  });
-
-  $("sb-calendar")?.addEventListener("click", () => {
-    if (filterPanel?.hidden) {
-      filterPanel.hidden = false;
-      filterBtn?.setAttribute("aria-expanded", "true");
-      filterBtn?.classList.add("is-active");
-    }
-    filterPanel?.scrollIntoView({ behavior: "smooth", block: "start" });
-    setTimeout(() => $("filter-year")?.focus({ preventScroll: true }), 250);
-  });
+  setupFilterPopover();
 
   $("sb-refresh")?.addEventListener("click", () => window.location.reload());
 

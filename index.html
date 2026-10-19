@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="./assets/enaex-favicon.png">
   <meta name="description" content="Análise de desvios de inclinação, azimute e profundidade dos furos de perfuração — US Vale Verde.">
   <link rel="preconnect" href="https://docs.google.com">
-  <link rel="stylesheet" href="./styles.css?v=34">
+  <link rel="stylesheet" href="./styles.css?v=35">
 </head>
 <body>
   <header class="topbar">
@@ -59,23 +59,6 @@
       </div>
     </section>
 
-    <section class="filter-panel" aria-label="Filtros">
-      <div class="filters">
-        <label class="filter">
-          <span>ANO</span>
-          <select id="filter-year"></select>
-        </label>
-        <label class="filter">
-          <span>MÊS</span>
-          <select id="filter-month"></select>
-        </label>
-        <label class="filter filter--wide">
-          <span>PLANO</span>
-          <select id="filter-plan"></select>
-        </label>
-        <button id="filter-reset" type="button" class="filter-reset">Limpar</button>
-      </div>
-    </section>
 
     <p class="status" id="status" aria-live="polite">
       <span class="status__dot" id="status-dot"></span>
@@ -465,6 +448,27 @@
     </div>
   </div>
 
+  <section class="filter-panel filter-popover" id="filter-panel" aria-labelledby="filter-panel-title" hidden>
+    <div class="filter-popover__head">
+      <h2 id="filter-panel-title">Filtros</h2>
+      <button id="filter-panel-close" type="button" class="filter-popover__close" aria-label="Fechar filtros" title="Fechar">&times;</button>
+    </div>
+      <div class="filters">
+        <label class="filter">
+          <span>ANO</span>
+          <select id="filter-year"></select>
+        </label>
+        <label class="filter">
+          <span>MÊS</span>
+          <select id="filter-month"></select>
+        </label>
+        <label class="filter filter--wide">
+          <span>PLANO</span>
+          <select id="filter-plan"></select>
+        </label>
+        <button id="filter-reset" type="button" class="filter-reset filter-popover__clear">Limpar filtros</button>
+      </div>
+  </section>
   <dialog id="planta-dialog" class="planta-dialog" aria-labelledby="planta-dialog-title">
     <div class="planta-dialog__head">
       <div>
@@ -486,7 +490,7 @@
       <div>
         <p class="chart-block__eyebrow">DESVIOS POR PLANO</p>
         <h2 id="relatorio-title">Relatório de desvios por plano</h2>
-        <p class="relatorio-dialog__sub">Escolha um plano para exportar todos os furos fora da tolerância (ângulo, azimute ou profundidade). Período: <strong id="relatorio-periodo">—</strong>. Para mudar o período, use os filtros Ano e Mês da página.</p>
+        <p class="relatorio-dialog__sub">Escolha um plano para exportar todos os furos fora da tolerância (ângulo, azimute ou profundidade). Período: <strong id="relatorio-periodo">—</strong>. Para mudar o período, use o filtro de período (ícone de calendário) na barra lateral.</p>
       </div>
       <button id="relatorio-close" type="button" class="filter-reset">Fechar</button>
     </div>
@@ -526,7 +530,7 @@
   <script type="module" src="./map3d.js?v=14"></script>
   <script src="./planta.js?v=21"></script>
   <script src="./relatorio-plano.js?v=18"></script>
-  <script src="./app.js?v=27"></script>
+  <script src="./app.js?v=28"></script>
   <script src="./excel-export-v2.js?v=5"></script>
 </body>
 </html>
