@@ -1747,8 +1747,14 @@ async function refreshDxfIndexIfChanged() {
   DXF_REFRESH_IN_FLIGHT = true;
   try {
     const before = DXF_INDEX_SIGNATURE;
+    const hadMissing = DXF_MISS.size > 0;
     await loadDxfIndex(true);
-    if (before !== DXF_INDEX_SIGNATURE) {
+    // Falhas transitórias de rede não devem bloquear o plano até recarregar a página.
+    if (hadMissing) {
+      for (const plano of DXF_MISS) DXF_CACHE.delete(plano);
+      DXF_MISS.clear();
+    }
+    if (hadMissing || before !== DXF_INDEX_SIGNATURE) {
       await drawMap();
       await drawPlanta();
     }
