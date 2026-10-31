@@ -15,8 +15,8 @@
    ===================================================================== */
 
 // Planilha "Planejado - Coordenadas Previstas dos Furos (XYZ)". Lê a primeira aba
-// (que deve se chamar PLANEJADO), por isso o parâmetro "sheet" não é enviado.
-const PLANEJADO_SHEET_ID = "180XzsGaAuYqcvyZyFUTpTHtdFu97o8jmBrahzwYkBV0";
+// com os cabeçalhos PLANO, Y, X e Z, por isso o parâmetro "sheet" não é enviado.
+const PLANEJADO_SHEET_ID = "1dfZD8SdNN1zKcrRMMoTsBDtYP0gxYr9b";
 const PLANEJADO_GVIZ_URL = `https://docs.google.com/spreadsheets/d/${PLANEJADO_SHEET_ID}/gviz/tq?tqx=out:json&headers=1`;
 // Deslocamento XY aceito: 2 vezes o diâmetro projetado do furo. O diâmetro da planilha
 // está em milímetros (ex.: 101,6 mm; 127 mm; 139,7 mm), por isso a conversão para metros.

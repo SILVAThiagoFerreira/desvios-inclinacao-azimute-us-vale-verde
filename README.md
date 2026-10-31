@@ -80,8 +80,8 @@ legado `PC53.dxf` → `PP53` já está configurado no sincronizador.
 O bloco "Aderência em planta" compara, em cada plano, o collar previsto com o collar realizado.
 
 - **Previsto:** planilha `Planejado - Coordenadas Previstas dos Furos (XYZ)`, ID
-  `180XzsGaAuYqcvyZyFUTpTHtdFu97o8jmBrahzwYkBV0`, na pasta do projeto no Google Drive.
-  Use a aba `PLANEJADO` (o site lê a primeira aba) com as colunas `PLANO | Y | X | Z`.
+  `1dfZD8SdNN1zKcrRMMoTsBDtYP0gxYr9b`, na pasta do projeto no Google Drive.
+  Use a primeira aba com as colunas `PLANO | Y | X | Z | DIAMETRO | ID`. O ID está disponível para rastreabilidade; atualmente o pareamento no dashboard usa proximidade XY.
   Uma linha por furo previsto. `PLANO` deve ser igual ao nome-base do DXF (`PC-22` para
   `PC-22.dxf`). Coordenadas no mesmo sistema e unidade (metros) dos DXF. A planilha precisa
   estar com acesso "Qualquer pessoa com o link", como a planilha principal.
