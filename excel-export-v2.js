@@ -361,9 +361,9 @@ async function exportToXlsx(btn = document.getElementById("export-xlsx")) {
     else if (selectedMonth !== "Todos") effectivePeriod = `${periodYears.join(", ") || "Ano não identificado"} · ${selectedMonthLabel}`;
     else if (periodYears.length === 1 && periodMonths.length === 1) effectivePeriod = `${periodYears[0]} · ${months[periodMonths[0] - 1] || periodMonths[0]}`;
     const filterLabel = getActiveFilterLabel();
-    const withinAngle = (value) => value != null && value >= LIMITS.angleMin && value <= LIMITS.angleMax;
-    const withinAz = (value) => value != null && Math.abs(value) <= LIMITS.azimuth;
-    const withinZ = (value) => value != null && Math.abs(value) <= LIMITS.depth;
+    const withinAngle = (value) => value != null && value > LIMITS.angleMin && value < LIMITS.angleMax;
+    const withinAz = (value) => value != null && Math.abs(value) < LIMITS.azimuth;
+    const withinZ = (value) => value != null && Math.abs(value) < LIMITS.depth;
     const rows = data.map((row) => ({
       "Ano": row.ano ?? "", "Mês": row.mes ?? "", "Data": row.data instanceof Date && !isNaN(row.data) ? new Date(row.data.getTime()) : null,
       "Plano": row.plano, "ID": row.id, "Ângulo frontal (°)": row.angle,

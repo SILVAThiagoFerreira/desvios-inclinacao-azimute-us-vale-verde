@@ -11,6 +11,8 @@ consolidada de furos perfurados e apresenta a aderência ao projeto conforme os
 | Δ Profundidade Medida (m) | 0,00 m ± 0,20 m (20 cm)                         |
 | Meta de aderência  | mínimo 80% dos furos                            |
 
+Limites exclusivos: valor exatamente igual ao limite fica fora ("Não"). Ângulo: faixa aberta entre 11,8° e 18,2°. Azimute e profundidade: |Δ| menor que o limite.
+
 ## Parâmetros de análise pela planilha
 
 Os parâmetros (ângulo, tolerâncias e meta) são lidos da aba `PARAMETROS` da mesma
@@ -41,7 +43,7 @@ Use vírgula ou ponto como separador decimal.
 
 Depois da configuração inicial, o fluxo de atualização é:
 
-1. Colocar ou substituir o arquivo `.dxf` na pasta `Holes - DXF` do Google Drive.
+1. Colocar ou substituir o arquivo `.dxf` na pasta `Holes - DXF` do Google Drive, com o nome `<PLANO>.dxf` (PLANO igual ao da planilha principal; ex.: `PP53.dxf`).
 2. Atualizar a base de furos na planilha Google Sheets.
 3. Aguardar até 5 minutos para o Apps Script atualizar a aba `DXF_INDEX`.
 4. Manter o dashboard aberto: ele consulta o índice a cada 30 segundos e redesenha o
@@ -65,8 +67,7 @@ a aba `DXF_INDEX` com as colunas `PLANO`, `ARQUIVO`, `FILE_ID`, `URL_DOWNLOAD`,
 `ATUALIZADO_EM`, `STATUS` e `TAMANHO_BYTES`. Essa aba é gerenciada pelo script e
 não deve ser editada manualmente.
 
-O nome-base do DXF deve corresponder ao valor de `PLANO` na planilha. O alias
-legado `PC53.dxf` → `PP53` já está configurado no sincronizador.
+O nome-base do DXF deve corresponder ao valor de `PLANO` na planilha (`<PLANO>.dxf`, ex.: `PP53.dxf`). O alias legado `PC53.dxf` → `PP53` continua no código, mas não é mais necessário: o arquivo foi renomeado em 04/11/2026.
 
 ## Responsividade
 
@@ -104,9 +105,9 @@ O bloco "Aderência em planta" compara, em cada plano, o collar previsto com o c
   medição na análise e permanecem sem valores realizados inventados.
   Backups, hashes das fontes, correspondências e conferência das bases ficam
   em `output/PC651026/substituicao_20261021/`, fora da publicação.
-- **Pareamento:** cada collar previsto é ligado ao realizado mais próximo em planta, um para
+- **PC651026, linhas na planilha:** principal, linhas 1704–1936 (233 medições); PLANEJADO, linhas 1884–2117 (234 previstos, 228 com ID).
+- **Pareamento:** cada collar previsto é ligado ao realizado mais próximo em planta, um para um, até 2,0 m (`COLLAR_MATCH_MAX` em `planta.js`).
 - **XY sem dado confiável:** se 95% ou mais dos collares pareados coincidem com o previsto (menos de 1 mm), o ponto `Hole` do DXF repete o previsto e o XY do plano não mede desvio. Nesse caso o XY fica como "sem dado confiável" (cinza no mapa, sem barra no gráfico, "—" no relatório), em vez de 100%.
-  um, até 2,0 m (`COLLAR_MATCH_MAX` em `planta.js`).
 - **Tolerâncias:** deslocamento XY (distância em planta) ≤ 2 × diâmetro projetado do furo,
   com o diâmetro da coluna `DIAMETRO` em milímetros (101,6 mm = limite de 0,2032 m; 127 mm =
   limite de 0,254 m; 139,7 mm = limite de 0,2794 m).
@@ -117,6 +118,31 @@ O bloco "Aderência em planta" compara, em cada plano, o collar previsto com o c
 - A janela "Ver todos os planos" tem os botões "Exportar PDF" e "Exportar imagem", que geram um documento do eixo da janela aberta (XY ou Z), com todos os planos do filtro e os gráficos XY e Z. Clicar fora da janela fecha. A barra de status só aparece em carregamento ou erro.
 - Os filtros de ANO, MÊS e PLANO valem para o bloco. Sem filtro de período, os previstos sem
   furo realizado também aparecem.
+
+## Mapa 3D
+
+O mapa 3D (bloco "Mapa de execução") usa o mesmo pareamento da planta:
+
+- **Emboque previsto (anel cinza):** collar do PLANEJADO pareado ao realizado. X e Y vêm do previsto; Z é o do collar realizado do mesmo furo. Assim o previsto fica na altura do realizado e a diferença aparece só no plano XY. Sem par, o anel fica no início do furo teórico.
+- **Tubo previsto (cinza, semitransparente):** linha teórica do DXF (camada `THEORETICAL HOLE`), com o início no emboque previsto pareado.
+- **Emboque realizado (esfera azul):** ponto da camada `HOLE` do DXF. Sem ponto, usa o início do executado; nunca o previsto. Com os furos ocultos, cada emboque vira um círculo achatado no chão.
+- **Linha previsto × realizado:** aparece quando a distância passa de 0,10 m (`COLLAR_LINK_MIN` em `map3d.js`).
+- A legenda da página mostra só Planejado, Executado e Emboque; o anel e a esfera ainda não têm item próprio.
+
+## Pendências de dados
+
+Itens da conferência de 04/11/2026. Nenhum foi corrigido na planilha: cabe ao responsável pelos dados.
+
+1. **Flags de limite na planilha.** Nos valores exatamente no limite, a coluna "dentro do limite" não segue uma regra única. Δ Profundidade = +0,20 m: 10 "Sim" e 7 "Não"; = −0,20 m: 13 "Sim" e 12 "Não"; ângulo = 18,2°: 4 "Sim" e 1 "Não". O site aplica a regra estrita (no limite = "Não"). Recalcular essas flags pela mesma regra.
+2. **PC-23B e PC-23C.** 48 linhas com `Data` = 19/06/2026, mas `Ano` = 2026 e `Mês` = 4 (abril). O site usa `Data`, então elas aparecem em junho. Confirmar a data correta.
+3. **PC-24.** 191 de 193 linhas sem azimute planejado e sem Δ Azimute (ficam fora do KPI de azimute).
+4. **Δ Azimute fora de escala.** PC-14, IDs 108–126: entre −95,4° e +107,9°. PC651026, ID 380: −147,93°. Conferir se é erro de leitura ou de furo.
+5. **Ângulos muito baixos** (projeto 15° ± 3,2°). PC-14, IDs 105–129: 0,4° a 8,2°. PC-24, IDs 79–86: 0,2° a 1,6°. PC-44, IDs 801–814: 0,3° a 5,5°. Conferir a leitura do ângulo.
+6. **Collar do DXF igual ao previsto** (o ponto `Hole` repete o previsto): PC-09, PC-14, PC-15, PC-19, PC-23B, PC-23C, PC-24, PC-31, PC-35, PC-38.
+7. **PC-22 e PC22B.** Mesmas coordenadas no PLANEJADO (30 linhas cada, idênticas). Confirmar se são o mesmo fogo ou se uma das duas é cópia.
+8. **PC-23 (`PC-23.dxf`).** Existe no Drive e em `data/`, mas não tem linhas na planilha principal; por isso não aparece nos filtros.
+9. **`PC651026.dxf`** não está na pasta Drive (04/11/2026). O site usa `data/PC651026.dxf`. Subir ao Drive se o arquivo tiver de estar na fonte.
+10. **PLANEJADO, PC651026.** 6 de 234 linhas sem `ID` (coluna F).
 
 ## Fonte
 Planilha pública US Vale Verde:

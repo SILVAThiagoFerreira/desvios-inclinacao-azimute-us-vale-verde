@@ -37,6 +37,8 @@ const PARAMS_DEFAULTS = {
 };
 let PARAMS = { ...PARAMS_DEFAULTS };
 
+/* Regra estrita: valor igual ao limite fica FORA ("Não"). Ângulo: faixa aberta (min, max).
+   Azimute e profundidade: |Δ| < limite. Mesma regra na planilha, planta, relatório e exportação. */
 const LIMITS = {
   angleMin: 11.8, angleMax: 18.2, angleExpected: 15, angleTol: 3.2,
   azimuth: 6.39,
@@ -514,9 +516,9 @@ function computeMetrics(data) {
   const azVals = data.filter((r) => r.azDelta != null);
   const zVals = data.filter((r) => r.depthDelta != null);
 
-  const angleOk = angleVals.filter((r) => r.angle >= LIMITS.angleMin && r.angle <= LIMITS.angleMax).length;
-  const azOk = azVals.filter((r) => Math.abs(r.azDelta) <= LIMITS.azimuth).length;
-  const zOk = zVals.filter((r) => Math.abs(r.depthDelta) <= LIMITS.depth).length;
+  const angleOk = angleVals.filter((r) => r.angle > LIMITS.angleMin && r.angle < LIMITS.angleMax).length;
+  const azOk = azVals.filter((r) => Math.abs(r.azDelta) < LIMITS.azimuth).length;
+  const zOk = zVals.filter((r) => Math.abs(r.depthDelta) < LIMITS.depth).length;
 
   return {
     total: data.length,
@@ -756,7 +758,7 @@ function drawAngle(data, alvo = {}) {
   const ctx = alvo.canvas || document.getElementById("chart-angle");
   const colored = points.map((p) => ({
     ...p,
-    ok: p.y >= LIMITS.angleMin && p.y <= LIMITS.angleMax,
+    ok: p.y > LIMITS.angleMin && p.y < LIMITS.angleMax,
   }));
   CHARTS[key] = new Chart(ctx, aplicarAlvo({
     type: "scatter",
@@ -794,7 +796,7 @@ function drawDirection(data, alvo = {}) {
   const pts = data
     .filter((r) => r.azDelta != null && r.depthDelta != null)
     .map((r) => ({ x: r.azDelta, y: r.depthDelta, id: r.id, plano: r.plano }));
-  const inBox = (p) => Math.abs(p.x) <= LIMITS.azimuth && Math.abs(p.y) <= LIMITS.depth;
+  const inBox = (p) => Math.abs(p.x) < LIMITS.azimuth && Math.abs(p.y) < LIMITS.depth;
   const xExt = Math.max(45, ...pts.map((p) => Math.abs(p.x))) * 1.05;
   const yExt = Math.max(1.0, ...pts.map((p) => Math.abs(p.y))) * 1.15;
 
@@ -850,7 +852,7 @@ function drawAzByHole(data, alvo = {}) {
       labels,
       datasets: [{
         data: pts.map((r) => r.azDelta),
-        backgroundColor: pts.map((r) => Math.abs(r.azDelta) <= LIMITS.azimuth ? C.inkSoft : C.red),
+        backgroundColor: pts.map((r) => Math.abs(r.azDelta) < LIMITS.azimuth ? C.inkSoft : C.red),
         borderWidth: 0,
         barPercentage: 1, categoryPercentage: 0.9,
       }],
@@ -892,7 +894,7 @@ function drawDepthByHole(data, alvo = {}) {
       labels,
       datasets: [{
         data: pts.map((r) => r.depthDelta),
-        backgroundColor: pts.map((r) => Math.abs(r.depthDelta) <= LIMITS.depth ? C.inkSoft : C.red),
+        backgroundColor: pts.map((r) => Math.abs(r.depthDelta) < LIMITS.depth ? C.inkSoft : C.red),
         borderWidth: 0,
         barPercentage: 1, categoryPercentage: 0.9,
       }],
@@ -1019,7 +1021,7 @@ function drawHist(canvasId, values, opts = {}) {
   });
   const labels = counts.map((_, i) => min + step * (i + 0.5));
   const colors = labels.map((c) => {
-    if (opts.limit != null && Math.abs(c) > opts.limit) return C.red;
+    if (opts.limit != null && Math.abs(c) >= opts.limit) return C.red;
     return C.ink;
   });
   const digits = opts.digits ?? 1;
@@ -1239,9 +1241,9 @@ function addExcelChartSheet(workbook, definition, data, filterLabel, logoId) {
 }
 
 function buildExcelChartDefinitions(data) {
-  const withinAngle = (value) => value != null && value >= LIMITS.angleMin && value <= LIMITS.angleMax;
-  const withinAz = (value) => value != null && Math.abs(value) <= LIMITS.azimuth;
-  const withinZ = (value) => value != null && Math.abs(value) <= LIMITS.depth;
+  const withinAngle = (value) => value != null && value > LIMITS.angleMin && value < LIMITS.angleMax;
+  const withinAz = (value) => value != null && Math.abs(value) < LIMITS.azimuth;
+  const withinZ = (value) => value != null && Math.abs(value) < LIMITS.depth;
   const dateValue = (value) => value instanceof Date && !isNaN(value) ? value : null;
   const groups = {};
   data.forEach((row) => (groups[row.plano] ||= []).push(row));
@@ -1333,9 +1335,9 @@ async function exportToXlsx(btn = document.getElementById("export-xlsx")) {
     ? "Todos"
     : (meses[Number(selectedMonth) - 1] || selectedMonth);
 
-  const withinAngle = (v) => v != null && v >= LIMITS.angleMin && v <= LIMITS.angleMax;
-  const withinAz = (v) => v != null && Math.abs(v) <= LIMITS.azimuth;
-  const withinZ = (v) => v != null && Math.abs(v) <= LIMITS.depth;
+  const withinAngle = (v) => v != null && v > LIMITS.angleMin && v < LIMITS.angleMax;
+  const withinAz = (v) => v != null && Math.abs(v) < LIMITS.azimuth;
+  const withinZ = (v) => v != null && Math.abs(v) < LIMITS.depth;
 
   const fmtDate = (d) => (d instanceof Date && !isNaN(d))
     ? `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`

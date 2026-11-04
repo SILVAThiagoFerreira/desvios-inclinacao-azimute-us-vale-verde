@@ -195,10 +195,10 @@ function plantaUltimoPorFuro(plano, tf, campo) {
 
 /* Inclinação e azimute do furo dentro da conformidade do site (mesmos critérios de computeMetrics). */
 function plantaAnguloOk(angle) {
-  return angle >= LIMITS.angleMin && angle <= LIMITS.angleMax;
+  return angle > LIMITS.angleMin && angle < LIMITS.angleMax;
 }
 function plantaAzimuteOk(azDelta) {
-  return Math.abs(azDelta) <= LIMITS.azimuth;
+  return Math.abs(azDelta) < LIMITS.azimuth;
 }
 
 /* Métricas de conformidade do plano (inclinação e azimute) pelos registros do período, como o KPI.
@@ -233,7 +233,7 @@ function tolXY(p) {
 function plantaStatusFor(m, mode) {
   if (mode === "z") {
     if (m.dprof == null) return "na";
-    return Math.abs(m.dprof) <= plantaTolZ() ? "ok" : "red";
+    return Math.abs(m.dprof) < plantaTolZ() ? "ok" : "red";
   }
   if (mode === "ang") {
     if (m.ang == null) return "na";
@@ -256,7 +256,7 @@ function plantaMetrics(matches, registros) {
   const xy = validos.filter((m) => m.dxy <= tolXY(m.p)).length;
   // Z conta só os furos com registro de profundidade no período (mesma base da conformidade de profundidade).
   const zn = matches.filter((m) => m.dprof != null).length;
-  const z = matches.filter((m) => m.dprof != null && Math.abs(m.dprof) <= plantaTolZ()).length;
+  const z = matches.filter((m) => m.dprof != null && Math.abs(m.dprof) < plantaTolZ()).length;
   const kpi = registros ? plantaKpiParametros(registros) : { angN: null, ang: null, angPct: null, azN: null, az: null, azPct: null };
   return {
     n,
