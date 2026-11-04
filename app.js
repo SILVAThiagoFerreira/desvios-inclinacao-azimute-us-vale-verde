@@ -1887,13 +1887,15 @@ function map3dInfo(plano, id) {
 /* Collar previsto (aba PLANEJADO) de cada collar realizado, pelo mesmo pareamento da planta
    (plantaParear -> matchPlanCollars: um para um por plano, até COLLAR_MATCH_MAX). Usa todos os
    furos do DXF do plano, não os filtrados, para o pareamento não mudar com o filtro.
-   Chave: plano + coordenadas do collar realizado (mesma regra de collar da planta). */
+   Chave: plano + coordenadas do collar realizado (mesma regra de collar da planta).
+   X e Y vêm do previsto (PLANEJADO); Z é o do collar realizado do mesmo furo, para o emboque
+   previsto ficar na altura do realizado e a diferença aparecer só no plano XY. */
 function map3dPlannedByCollar(withGeom) {
   const byKey = new Map();
   if (!PLANEJADO) return byKey;
   withGeom.forEach(({ plano, holes }) => {
     const pareado = plantaParear(plano, holes, { y: "", mo: "", active: false });
-    (pareado?.matches || []).forEach((m) => byKey.set(`${plano}|${m.r.x}|${m.r.y}|${m.r.z}`, m.p));
+    (pareado?.matches || []).forEach((m) => byKey.set(`${plano}|${m.r.x}|${m.r.y}|${m.r.z}`, { x: m.p.x, y: m.p.y, z: m.r.z }));
   });
   return byKey;
 }
