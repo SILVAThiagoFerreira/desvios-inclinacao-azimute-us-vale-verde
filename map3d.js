@@ -2,8 +2,8 @@
    Mapa 3D de execução — Desvios de Perfuração
    Recebe os furos visíveis do mapa 2D (evento "map3d:data", publicado
    por app.js) e desenha planejado (tubos semitransparentes), executado
-   (segmentos vermelhos) e emboques previstos (anel cinza) e realizados
-   (esfera azul) em uma cena girável.
+   (segmentos vermelhos) e emboques previstos (anel cinza, collar do PLANEJADO
+   pareado como na planta) e realizados (esfera azul) em uma cena girável.
    Controles: botão esquerdo/direito gira, botão do meio move, roda aproxima.
    Clique em um furo para ver ID e informações.
    ============================================================ */
@@ -16,12 +16,15 @@ const COLORS = {
   real: 0xe20613,
   collar: 0x1d2a9c,
   collarPlanned: 0x8a8f96,
+  collarLink: 0x6c747b,
   selected: 0xf5b700,
   background: 0xfbfbfc,
   gridMain: 0xb8bec4,
   gridSub: 0xdfe3e7,
 };
 const PLANNED_OPACITY = 0.4;
+// Linha ligando emboque previsto e realizado só quando a distância (metros) passa deste valor
+const COLLAR_LINK_MIN = 0.1;
 // Sensibilidade média: metade da velocidade padrão do OrbitControls
 const SPEED = { rotate: 0.5, zoom: 0.5, pan: 0.5 };
 const LAYER_KEYS = ["planned", "real", "collar", "collarPlanned", "grid", "labels"];
@@ -446,8 +449,9 @@ function main() {
       if (collar && Number.isFinite(collar.x)) {
         g(0, "POINT"); g(8, "HOLE"); pt(10, collar);
       }
-      if (h.planned && h.planned.length >= 2 && Number.isFinite(h.planned[0].x)) {
-        g(0, "POINT"); g(8, "THEORETICAL COLLAR"); pt(10, h.planned[0]);
+      const pc = h.plannedCollar || (h.planned && h.planned[0]);
+      if (pc && Number.isFinite(pc.x)) {
+        g(0, "POINT"); g(8, "THEORETICAL COLLAR"); pt(10, pc);
       }
       if (h.planned && h.planned.length >= 2) {
         g(0, "LINE"); g(8, "THEORETICAL HOLE");
@@ -530,6 +534,7 @@ function main() {
     };
     holes.forEach((h) => {
       bound(h.collar);
+      bound(h.plannedCollar);
       (h.planned || []).forEach(bound);
       (h.real || []).forEach(bound);
     });
@@ -554,14 +559,14 @@ function main() {
     const plannedSegs = [];
     const realSegs = [];
     const collars = [];        // emboque realizado
-    const plannedCollars = []; // emboque previsto (início do furo teórico)
+    const plannedCollars = []; // emboque previsto (PLANEJADO pareado; sem par, início do furo teórico)
+    const collarLinks = [];    // linhas entre previsto e realizado afastados
     anchors = new Array(holes.length);
     holes.forEach((h, hi) => {
       let anchor = null;
       if (h.planned && h.planned.length >= 2 && h.planned.slice(0, 2).every((p) => Number.isFinite(p.x))) {
         const a = toWorld(h.planned[0]), b = toWorld(h.planned[1]);
         plannedSegs.push({ a, b, hi });
-        plannedCollars.push({ p: a, hi });
         anchor = a;
       }
       if (h.real && h.real.length >= 2) {
@@ -572,10 +577,20 @@ function main() {
       }
       // Emboque realizado: ponto do DXF ou início do executado (nunca o previsto)
       const c = h.collar || (h.real && h.real[0]);
-      if (c && Number.isFinite(c.x)) {
+      const cOk = Boolean(c && Number.isFinite(c.x));
+      if (cOk) {
         const p = toWorld(c);
         collars.push({ p, hi });
         anchor = p;
+      }
+      // Emboque previsto: collar do PLANEJADO pareado (como na planta); sem par, início do furo teórico
+      const pc = h.plannedCollar || (h.planned && h.planned[0]);
+      if (pc && Number.isFinite(pc.x)) {
+        const pw = toWorld(pc);
+        plannedCollars.push({ p: pw, hi });
+        if (cOk && Math.hypot(pc.x - c.x, pc.y - c.y, pc.z - c.z) > COLLAR_LINK_MIN) {
+          collarLinks.push({ a: pw, b: toWorld(c) });
+        }
       }
       anchors[hi] = anchor;
     });
@@ -684,11 +699,21 @@ function main() {
       pickEntries.push({ key: "collarPlanned", mesh: ringMesh, holeOf });
     }
 
+    // Linha fina do previsto ao realizado, só onde os dois collares estão afastados
+    if (collarLinks.length) {
+      const linkPos = new Float32Array(collarLinks.length * 6);
+      collarLinks.forEach(({ a, b }, i) => linkPos.set([a.x, a.y, a.z, b.x, b.y, b.z], i * 6));
+      const linkGeom = new THREE.BufferGeometry();
+      linkGeom.setAttribute("position", new THREE.BufferAttribute(linkPos, 3));
+      layerGroups.collarPlanned.add(new THREE.LineSegments(linkGeom, new THREE.LineBasicMaterial({ color: COLORS.collarLink })));
+    }
+
     // Caixa envolvente em coordenadas da cena
     const box = new THREE.Box3();
     plannedSegs.forEach(({ a, b }) => { box.expandByPoint(a); box.expandByPoint(b); });
     realSegs.forEach(({ a, b }) => { box.expandByPoint(a); box.expandByPoint(b); });
     collars.forEach(({ p }) => box.expandByPoint(p));
+    plannedCollars.forEach(({ p }) => box.expandByPoint(p));
 
     // Chão de referência logo abaixo dos furos
     const size = new THREE.Vector3();

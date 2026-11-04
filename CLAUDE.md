@@ -26,7 +26,7 @@ Os arquivos de origem ficam fora do repositório (pasta de anotações do usuár
 | Recurso | ID / URL | Uso |
 | --- | --- | --- |
 | Planilha principal de desvios (`Inclinação_Azimute_Profundidade.xlsx`, abre como Sheets) | `1ef7edY0Yye6arldVfOUYDcjI4GvY6g5U` | Aba `Inclinação_Azimute_Profundidade` (dados) e aba `DXF_INDEX` (gerada pelo Apps Script; **não editar à mão**). |
-| Planilha de coordenadas previstas (`Planejado - Coordenadas Previstas dos Furos (XYZ)`) | `180XzsGaAuYqcvyZyFUTpTHtdFu97o8jmBrahzwYkBV0` | Aba **`PLANEJADO`** (a primeira aba; o site lê a primeira aba). |
+| Planilha de coordenadas previstas (`Planejado - Coordenadas Previstas dos Furos (XYZ)`) | `1dfZD8SdNN1zKcrRMMoTsBDtYP0gxYr9b` | Aba **`PLANEJADO`** (a primeira aba; o site lê a primeira aba). |
 | Pasta Drive `Holes - DXF` | `1_by9dFzsv3vW4Zb9YKb-QnOIjXwdoe-4` (`https://drive.google.com/drive/folders/1_by9dFzsv3vW4Zb9YKb-QnOIjXwdoe-4`) | DXFs que o Apps Script sincroniza a cada 5 min. |
 
 ### 2.1 Aba principal (`Inclinação_Azimute_Profundidade`)
@@ -61,7 +61,7 @@ Os arquivos de origem ficam fora do repositório (pasta de anotações do usuár
 
 - `app.js`: lê a aba principal via `gviz` (`SHEET_ID = 1ef7…`), com fallback CSV. Recarrega a cada acesso e a cada atualização periódica.
 - `app.js` → `DXF_INDEX`: lê a aba `DXF_INDEX` (gerada pelo Apps Script `integrations/google-drive-dxf-sync/Code.gs`), que lista os arquivos da pasta `Holes - DXF`. Cada DXF é servido pelo proxy do Apps Script (`DXF_PROXY_URL`).
-- `planta.js`: lê a aba `PLANEJADO` da planilha `180Xzs…` via `gviz` (primeira aba). Os previstos são pareados com o collar realizado do DXF.
+- `planta.js`: lê a aba `PLANEJADO` da planilha `1dfZD8SdNN…` (`PLANEJADO_SHEET_ID`) via `gviz` (primeira aba). Os previstos são pareados com o collar realizado do DXF.
 - Filtros (`filter-year`, `filter-month`, `filter-plan`) são montados a partir dos **registros que existem** na aba principal. **Se o plano não tiver linhas nessa aba, ele não aparece em nenhum filtro**, mesmo com DXF e PLANEJADO prontos.
 - Mês: o app usa a coluna `Data` (`dt.getMonth()+1`) como fonte; `Ano/Mês` só são usados quando `Data` está vazia. Existe uma regra de janela no código (`MIN_YM` = nov/2025; `SKIP_YM` = nov/2026, que é ignorado). **Não confundir**: se o plano é de outubro de 2026, a `Data` precisa ser de outubro de 2026 e não cair em nov/2026.
 - Os DXFs são lidos de `DXF_INDEX` (Drive) quando existem; senão, do `data/<plano>.dxf` do repositório.

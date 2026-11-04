@@ -142,7 +142,11 @@ async function loadPlanejado() {
 async function refreshPlanejadoIfChanged() {
   const before = PLANEJADO_SIGNATURE;
   await loadPlanejado();
-  if (before !== PLANEJADO_SIGNATURE) await drawPlanta();
+  // O mapa 3D também usa o previsto pareado: redesenha junto quando a planilha muda
+  if (before !== PLANEJADO_SIGNATURE) {
+    await drawPlanta();
+    await drawMap();
+  }
 }
 
 /* Pareamento um para um, do menor para o maior desvio em planta. */

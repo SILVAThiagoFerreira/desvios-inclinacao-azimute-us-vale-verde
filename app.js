@@ -1884,18 +1884,38 @@ function map3dInfo(plano, id) {
   };
 }
 
+/* Collar previsto (aba PLANEJADO) de cada collar realizado, pelo mesmo pareamento da planta
+   (plantaParear -> matchPlanCollars: um para um por plano, até COLLAR_MATCH_MAX). Usa todos os
+   furos do DXF do plano, não os filtrados, para o pareamento não mudar com o filtro.
+   Chave: plano + coordenadas do collar realizado (mesma regra de collar da planta). */
+function map3dPlannedByCollar(withGeom) {
+  const byKey = new Map();
+  if (!PLANEJADO) return byKey;
+  withGeom.forEach(({ plano, holes }) => {
+    const pareado = plantaParear(plano, holes, { y: "", mo: "", active: false });
+    (pareado?.matches || []).forEach((m) => byKey.set(`${plano}|${m.r.x}|${m.r.y}|${m.r.z}`, m.p));
+  });
+  return byKey;
+}
+
 function publishMap3D(withGeom, visibleIdsByPlan) {
   const holes = [];
+  const previstos = map3dPlannedByCollar(withGeom);
   withGeom.forEach(({ plano, holes: list }) => list
     .filter((h) => !h.id || visibleIdsByPlan.get(plano)?.has(String(Number(h.id))) || visibleIdsByPlan.get(plano)?.has(String(h.id)))
-    .forEach((h) => holes.push({
-      plano,
-      id: h.id || null,
-      info: map3dInfo(plano, h.id),
-      collar: h.collar || null,
-      planned: h.planned || null,
-      real: h.real || null,
-    })));
+    .forEach((h) => {
+      const c = h.collar || (h.real && h.real[0]);
+      const p = c ? previstos.get(`${plano}|${c.x}|${c.y}|${c.z}`) : null;
+      holes.push({
+        plano,
+        id: h.id || null,
+        info: map3dInfo(plano, h.id),
+        collar: h.collar || null,
+        planned: h.planned || null,
+        real: h.real || null,
+        plannedCollar: p ? { x: p.x, y: p.y, z: p.z } : null,
+      });
+    }));
   window.__map3d = holes;
   document.dispatchEvent(new CustomEvent("map3d:data", { detail: holes }));
 }
