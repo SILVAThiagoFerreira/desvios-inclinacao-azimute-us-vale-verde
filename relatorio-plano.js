@@ -99,9 +99,9 @@ function relatorioRegistros(plano) {
 /* Parâmetros fora do limite de um furo: mesmos critérios de computeMetrics e da planilha. */
 function relatorioForaDoLimite(r) {
   const fora = [];
-  if (r.angle != null && (r.angle <= LIMITS.angleMin || r.angle >= LIMITS.angleMax)) fora.push("Ângulo");
-  if (r.azDelta != null && Math.abs(r.azDelta) >= LIMITS.azimuth) fora.push("Azimute");
-  if (r.depthDelta != null && Math.abs(r.depthDelta) >= LIMITS.depth) fora.push("Profundidade");
+  if (angleInside(r) === false) fora.push("Ângulo");
+  if (azInside(r) === false) fora.push("Azimute");
+  if (zInside(r) === false) fora.push("Profundidade");
   return fora;
 }
 

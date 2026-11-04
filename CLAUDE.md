@@ -69,7 +69,7 @@ Os arquivos de origem ficam fora do repositório (pasta de anotações do usuár
 - Mês: o app usa a coluna `Data` (`dt.getMonth()+1`) como fonte; `Ano/Mês` só são usados quando `Data` está vazia. Existe uma regra de janela no código (`MIN_YM` = nov/2025; `SKIP_YM` = nov/2026, que é ignorado). **Não confundir**: se o plano é de outubro de 2026, a `Data` precisa ser de outubro de 2026 e não cair em nov/2026.
 - Os DXFs são lidos de `DXF_INDEX` (Drive) quando existem; senão, do `data/<plano>.dxf` do repositório.
 - Não é necessário commit para atualizar dados da planilha ou do Drive. Commit só é necessário para `data/` (fallback e manifesto) ou para mudanças de código.
-- **Regra de limite (estrita):** ângulo entre 11,8° e 18,2°, sem incluir os extremos; `|Δ Azimute| < 6,39°`; `|Δ Profundidade| < 0,20 m`. Valor igual ao limite fica **Não**. Vale para KPIs, gráficos, planta, relatório e Excel (`LIMITS` em `app.js`). O site recalcula a partir dos Δ; a coluna `dentro do limite` da planilha não é usada. Valores da planilha exatamente no limite não seguem essa regra (ver README, Pendências de dados).
+- **Dentro/fora do limite: a flag da planilha é a fonte de verdade.** As colunas `Ângulo dentro do limite`, `Azimute dentro do limite` e `Z dentro do limite` (`Sim` / `Não`) definem a conta em KPIs, gráficos, planta, relatório e Excel. Se a flag estiver vazia ou `N/A` e houver valor, vale a regra numérica estrita dos `LIMITS` (ângulo entre 11,8° e 18,2° sem os extremos; `|Δ Azimute| < 6,39°`; `|Δ Profundidade| < 0,20 m`). Sem flag e sem valor, o furo fica fora da conta (`N/A`, fora do denominador, como antes). Histogramas usam os `LIMITS` só para colorir as faixas. Funções em `app.js`: `angleInside`, `azInside`, `zInside`. Flags no valor exato do limite: ver README, Pendências de dados.
 - **Mapa 3D (`map3d.js`):** emboque previsto = collar do PLANEJADO pareado ao realizado (X/Y do previsto, Z do realizado do mesmo furo); tubo previsto = linha teórica do DXF com início no emboque previsto; realizado = esfera azul. Detalhes no README, seção Mapa 3D.
 
 ## 5. Como anexar linhas nas planilhas (método que funcionou)
@@ -152,5 +152,5 @@ Ao alterar um `.js` publicado, subir o `?v=` do script em `index.html`; sem isso
 - `Diameter` do Projetado está em polegadas; a planilha `PLANEJADO` usa milímetros.
 - A aba `DXF_INDEX` é gerada pelo Apps Script; não editar à mão.
 - Publicar planilhas ou xlsx no repositório é proibido (repositório público).
-- Limites: valor exatamente igual ao limite fica "Não". A planilha não segue essa regra nesses valores (ver README, Pendências de dados).
+- Dentro/fora: a flag `Sim`/`Não` da planilha manda; o numérico só entra quando a flag está vazia ou N/A e há valor. Flags no valor exato do limite: ver README, Pendências de dados.
 - Pendências de dados para o usuário: ver `README.md`, seção **Pendências de dados**.

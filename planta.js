@@ -182,24 +182,18 @@ function plantaTimeFilter() {
 }
 
 /* Valor de um campo do registro (depthDelta, angle, azDelta) de cada furo do plano no período.
-   Um furo com mais de um registro usa o mais recente que tenha o campo preenchido. */
-function plantaUltimoPorFuro(plano, tf, campo) {
+   Um furo com mais de um registro usa o mais recente com dado do eixo.
+   Guarda o valor e se está dentro do limite (flag da planilha, ou regra numérica se a flag faltar). */
+function plantaUltimoPorFuro(plano, tf, campo, dentroDe) {
   const mapa = new Map();
   RECORDS
-    .filter((r) => r.plano === plano && r.id && r[campo] != null &&
+    .filter((r) => r.plano === plano && r.id && dentroDe(r) !== null &&
       (!tf.y || String(r.ano) === tf.y) && (!tf.mo || String(r.mes) === tf.mo))
     .sort((a, b) => (a.data ? a.data.getTime() : 0) - (b.data ? b.data.getTime() : 0))
-    .forEach((r) => mapa.set(String(Number(r.id)), r[campo]));
+    .forEach((r) => mapa.set(String(Number(r.id)), { v: r[campo], dentro: dentroDe(r) }));
   return mapa;
 }
 
-/* Inclinação e azimute do furo dentro da conformidade do site (mesmos critérios de computeMetrics). */
-function plantaAnguloOk(angle) {
-  return angle > LIMITS.angleMin && angle < LIMITS.angleMax;
-}
-function plantaAzimuteOk(azDelta) {
-  return Math.abs(azDelta) < LIMITS.azimuth;
-}
 
 /* Métricas de conformidade do plano (inclinação e azimute) pelos registros do período, como o KPI.
    Sem isso, a aderência do plano ficaria pelos furos desenhados, que podem ser menos que os registros. */
@@ -232,16 +226,16 @@ function tolXY(p) {
 /* Situação de um furo pareado no eixo pedido: "ok" dentro da tolerância, "red" fora. */
 function plantaStatusFor(m, mode) {
   if (mode === "z") {
-    if (m.dprof == null) return "na";
-    return Math.abs(m.dprof) < plantaTolZ() ? "ok" : "red";
+    if (m.zIn == null) return "na";
+    return m.zIn ? "ok" : "red";
   }
   if (mode === "ang") {
-    if (m.ang == null) return "na";
-    return plantaAnguloOk(m.ang) ? "ok" : "red";
+    if (m.angIn == null) return "na";
+    return m.angIn ? "ok" : "red";
   }
   if (mode === "az") {
-    if (m.dAz == null) return "na";
-    return plantaAzimuteOk(m.dAz) ? "ok" : "red";
+    if (m.azIn == null) return "na";
+    return m.azIn ? "ok" : "red";
   }
   if (m.xyDuvidoso) return "na";
   return m.dxy <= tolXY(m.p) ? "ok" : "red";
@@ -255,8 +249,8 @@ function plantaMetrics(matches, registros) {
   const xyN = validos.length;
   const xy = validos.filter((m) => m.dxy <= tolXY(m.p)).length;
   // Z conta só os furos com registro de profundidade no período (mesma base da conformidade de profundidade).
-  const zn = matches.filter((m) => m.dprof != null).length;
-  const z = matches.filter((m) => m.dprof != null && Math.abs(m.dprof) < plantaTolZ()).length;
+  const zn = matches.filter((m) => m.zIn != null).length;
+  const z = matches.filter((m) => m.zIn === true).length;
   const kpi = registros ? plantaKpiParametros(registros) : { angN: null, ang: null, angPct: null, azN: null, az: null, azPct: null };
   return {
     n,
@@ -1040,14 +1034,20 @@ function plantaParear(plano, holes, tf) {
   const exatos = matches.filter((m) => m.dxy < 0.001).length;
   const xyDuvidoso = matches.length > 0 && exatos / matches.length >= 0.95;
   matches.forEach((m) => { m.xyDuvidoso = xyDuvidoso; });
-  const profs = plantaUltimoPorFuro(plano, tf, "depthDelta");
-  const angs = plantaUltimoPorFuro(plano, tf, "angle");
-  const azs = plantaUltimoPorFuro(plano, tf, "azDelta");
+  const profs = plantaUltimoPorFuro(plano, tf, "depthDelta", zInside);
+  const angs = plantaUltimoPorFuro(plano, tf, "angle", angleInside);
+  const azs = plantaUltimoPorFuro(plano, tf, "azDelta", azInside);
   const porFuro = (mapa, m) => (m.r.id != null && mapa.has(m.r.id) ? mapa.get(m.r.id) : null);
   matches.forEach((m) => {
-    m.dprof = porFuro(profs, m);
-    m.ang = porFuro(angs, m);
-    m.dAz = porFuro(azs, m);
+    const z = porFuro(profs, m);
+    const a = porFuro(angs, m);
+    const az = porFuro(azs, m);
+    m.dprof = z ? z.v : null;
+    m.zIn = z ? z.dentro : null;
+    m.ang = a ? a.v : null;
+    m.angIn = a ? a.dentro : null;
+    m.dAz = az ? az.v : null;
+    m.azIn = az ? az.dentro : null;
   });
   const ids = tf.active ? plantaVisibleIds(plano, tf) : null;
   const visivel = (r) => !ids || !r.id || ids.has(r.id);
@@ -1062,7 +1062,7 @@ function plantaParear(plano, holes, tf) {
 /* Itens desenhados de um plano pareado: ligações previsto × realizado, realizados sem previsto e previstos sem furo. */
 function plantaItensDoPlano(p) {
   const items = p.matches.map((m) => ({
-    kind: "match", plano: p.plano, id: m.r.id, p: m.p, r: m.r, dxy: m.dxy, dprof: m.dprof, ang: m.ang, dAz: m.dAz, xyDuvidoso: m.xyDuvidoso,
+    kind: "match", plano: p.plano, id: m.r.id, p: m.p, r: m.r, dxy: m.dxy, dprof: m.dprof, zIn: m.zIn, ang: m.ang, angIn: m.angIn, dAz: m.dAz, azIn: m.azIn, xyDuvidoso: m.xyDuvidoso,
   }));
   p.unmatchedR.forEach((r) => items.push({ kind: "realized", plano: p.plano, id: r.id, r }));
   p.unmatchedP.forEach((q) => items.push({ kind: "planned", plano: p.plano, p: q }));

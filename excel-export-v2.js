@@ -361,17 +361,14 @@ async function exportToXlsx(btn = document.getElementById("export-xlsx")) {
     else if (selectedMonth !== "Todos") effectivePeriod = `${periodYears.join(", ") || "Ano não identificado"} · ${selectedMonthLabel}`;
     else if (periodYears.length === 1 && periodMonths.length === 1) effectivePeriod = `${periodYears[0]} · ${months[periodMonths[0] - 1] || periodMonths[0]}`;
     const filterLabel = getActiveFilterLabel();
-    const withinAngle = (value) => value != null && value > LIMITS.angleMin && value < LIMITS.angleMax;
-    const withinAz = (value) => value != null && Math.abs(value) < LIMITS.azimuth;
-    const withinZ = (value) => value != null && Math.abs(value) < LIMITS.depth;
     const rows = data.map((row) => ({
       "Ano": row.ano ?? "", "Mês": row.mes ?? "", "Data": row.data instanceof Date && !isNaN(row.data) ? new Date(row.data.getTime()) : null,
       "Plano": row.plano, "ID": row.id, "Ângulo frontal (°)": row.angle,
       "Azimute planejado (°)": row.azPlan, "Azimute executado (°)": row.azExec, "Δ Azimute (°)": row.azDelta,
       "Profundidade planejada (m)": row.depthPlan, "Profundidade executada (m)": row.depthExec, "Δ Profundidade (m)": row.depthDelta,
-      "Ângulo dentro do limite": row.angle == null ? "" : (withinAngle(row.angle) ? "Sim" : "Não"),
-      "Azimute dentro do limite": row.azDelta == null ? "" : (withinAz(row.azDelta) ? "Sim" : "Não"),
-      "Z dentro do limite": row.depthDelta == null ? "" : (withinZ(row.depthDelta) ? "Sim" : "Não"),
+      "Ângulo dentro do limite": textoDentro(angleInside(row)),
+      "Azimute dentro do limite": textoDentro(azInside(row)),
+      "Z dentro do limite": textoDentro(zInside(row)),
     }));
     const headers = Object.keys(rows[0]);
     const metrics = computeMetrics(data);

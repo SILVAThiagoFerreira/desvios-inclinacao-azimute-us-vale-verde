@@ -37,8 +37,8 @@ const PARAMS_DEFAULTS = {
 };
 let PARAMS = { ...PARAMS_DEFAULTS };
 
-/* Regra estrita: valor igual ao limite fica FORA ("Não"). Ângulo: faixa aberta (min, max).
-   Azimute e profundidade: |Δ| < limite. Mesma regra na planilha, planta, relatório e exportação. */
+/* Limites numéricos: usados só quando a flag "dentro do limite" da planilha está vazia ou N/A
+   e há valor (regra estrita: valor igual ao limite fica fora). Ver flagPlanilha / angleInside. */
 const LIMITS = {
   angleMin: 11.8, angleMax: 18.2, angleExpected: 15, angleTol: 3.2,
   azimuth: 6.39,
@@ -379,6 +379,9 @@ function buildRecords(table) {
       depthPlan: num(f.depthPlan),
       depthExec: num(f.depthExec),
       depthDelta: num(f.depthDelta),
+      okAngle: cell(f.okAngle),
+      okAz: cell(f.okAz),
+      okZ: cell(f.okZ),
       ano: ano != null ? Math.round(ano) : null,
       mes: mes != null ? Math.round(mes) : null,
       data: dt,
@@ -510,24 +513,42 @@ function updateActiveFilters() {
   });
 }
 
+/* ===================== Dentro/fora do limite =====================
+   Fonte de verdade: as colunas "Ângulo/Azimute/Z dentro do limite" da planilha (Sim/Não).
+   Flag vazia ou N/A com valor numérico: regra estrita dos LIMITS (valor igual ao limite fica fora).
+   Sem flag e sem valor: null, o furo fica fora da conta (não entra no denominador). */
+const flagPlanilha = (flag) => {
+  const t = norm(flag);
+  return t === "SIM" ? true : t === "NAO" ? false : null;
+};
+function dentroDoLimite(flag, valor, regraNumerica) {
+  const f = flagPlanilha(flag);
+  if (f !== null) return f;
+  if (valor == null || !isFinite(valor)) return null;
+  return regraNumerica(valor);
+}
+const angleInside = (r) => dentroDoLimite(r.okAngle, r.angle, (a) => a > LIMITS.angleMin && a < LIMITS.angleMax);
+const azInside = (r) => dentroDoLimite(r.okAz, r.azDelta, (d) => Math.abs(d) < LIMITS.azimuth);
+const zInside = (r) => dentroDoLimite(r.okZ, r.depthDelta, (d) => Math.abs(d) < LIMITS.depth);
+const textoDentro = (x) => (x === true ? "Sim" : x === false ? "Não" : "");
+
 /* ===================== Métricas ===================== */
 function computeMetrics(data) {
-  const angleVals = data.filter((r) => r.angle != null);
-  const azVals = data.filter((r) => r.azDelta != null);
-  const zVals = data.filter((r) => r.depthDelta != null);
-
-  const angleOk = angleVals.filter((r) => r.angle > LIMITS.angleMin && r.angle < LIMITS.angleMax).length;
-  const azOk = azVals.filter((r) => Math.abs(r.azDelta) < LIMITS.azimuth).length;
-  const zOk = zVals.filter((r) => Math.abs(r.depthDelta) < LIMITS.depth).length;
+  const angleIn = data.map(angleInside).filter((v) => v !== null);
+  const azIn = data.map(azInside).filter((v) => v !== null);
+  const zIn = data.map(zInside).filter((v) => v !== null);
+  const angleOk = angleIn.filter(Boolean).length;
+  const azOk = azIn.filter(Boolean).length;
+  const zOk = zIn.filter(Boolean).length;
 
   return {
     total: data.length,
-    anglePct: angleVals.length ? (angleOk / angleVals.length) * 100 : NaN,
-    azPct: azVals.length ? (azOk / azVals.length) * 100 : NaN,
-    zPct: zVals.length ? (zOk / zVals.length) * 100 : NaN,
-    angleOk, angleTotal: angleVals.length,
-    azOk, azTotal: azVals.length,
-    zOk, zTotal: zVals.length,
+    anglePct: angleIn.length ? (angleOk / angleIn.length) * 100 : NaN,
+    azPct: azIn.length ? (azOk / azIn.length) * 100 : NaN,
+    zPct: zIn.length ? (zOk / zIn.length) * 100 : NaN,
+    angleOk, angleTotal: angleIn.length,
+    azOk, azTotal: azIn.length,
+    zOk, zTotal: zIn.length,
   };
 }
 
@@ -754,11 +775,11 @@ function holeChartLabel(row) {
 function drawAngle(data, alvo = {}) {
   const key = alvo.key || "angle";
   destroy(key);
-  const points = data.filter((r) => r.angle != null).map((r, index) => ({ x: index + 1, y: r.angle, plano: r.plano, id: r.id, label: holeChartLabel(r) }));
+  const points = data.filter((r) => r.angle != null).map((r, index) => ({ x: index + 1, y: r.angle, plano: r.plano, id: r.id, label: holeChartLabel(r), ok: angleInside(r) === true }));
   const ctx = alvo.canvas || document.getElementById("chart-angle");
   const colored = points.map((p) => ({
     ...p,
-    ok: p.y > LIMITS.angleMin && p.y < LIMITS.angleMax,
+    ok: p.ok,
   }));
   CHARTS[key] = new Chart(ctx, aplicarAlvo({
     type: "scatter",
@@ -795,8 +816,7 @@ function drawDirection(data, alvo = {}) {
   destroy(key);
   const pts = data
     .filter((r) => r.azDelta != null && r.depthDelta != null)
-    .map((r) => ({ x: r.azDelta, y: r.depthDelta, id: r.id, plano: r.plano }));
-  const inBox = (p) => Math.abs(p.x) < LIMITS.azimuth && Math.abs(p.y) < LIMITS.depth;
+    .map((r) => ({ x: r.azDelta, y: r.depthDelta, id: r.id, plano: r.plano, inside: azInside(r) === true && zInside(r) === true }));
   const xExt = Math.max(45, ...pts.map((p) => Math.abs(p.x))) * 1.05;
   const yExt = Math.max(1.0, ...pts.map((p) => Math.abs(p.y))) * 1.15;
 
@@ -809,8 +829,8 @@ function drawDirection(data, alvo = {}) {
         pointRadius: 3.6,
         pointHoverRadius: 5.5,
         borderWidth: 0.6,
-        backgroundColor: (c) => (c.raw && inBox(c.raw) ? C.ink : C.red),
-        borderColor: (c) => (c.raw && inBox(c.raw) ? C.ink : C.red),
+        backgroundColor: (c) => (c.raw && c.raw.inside ? C.ink : C.red),
+        borderColor: (c) => (c.raw && c.raw.inside ? C.ink : C.red),
       }],
     },
     options: {
@@ -852,7 +872,7 @@ function drawAzByHole(data, alvo = {}) {
       labels,
       datasets: [{
         data: pts.map((r) => r.azDelta),
-        backgroundColor: pts.map((r) => Math.abs(r.azDelta) < LIMITS.azimuth ? C.inkSoft : C.red),
+        backgroundColor: pts.map((r) => (azInside(r) ? C.inkSoft : C.red)),
         borderWidth: 0,
         barPercentage: 1, categoryPercentage: 0.9,
       }],
@@ -894,7 +914,7 @@ function drawDepthByHole(data, alvo = {}) {
       labels,
       datasets: [{
         data: pts.map((r) => r.depthDelta),
-        backgroundColor: pts.map((r) => Math.abs(r.depthDelta) < LIMITS.depth ? C.inkSoft : C.red),
+        backgroundColor: pts.map((r) => (zInside(r) ? C.inkSoft : C.red)),
         borderWidth: 0,
         barPercentage: 1, categoryPercentage: 0.9,
       }],
@@ -1241,9 +1261,6 @@ function addExcelChartSheet(workbook, definition, data, filterLabel, logoId) {
 }
 
 function buildExcelChartDefinitions(data) {
-  const withinAngle = (value) => value != null && value > LIMITS.angleMin && value < LIMITS.angleMax;
-  const withinAz = (value) => value != null && Math.abs(value) < LIMITS.azimuth;
-  const withinZ = (value) => value != null && Math.abs(value) < LIMITS.depth;
   const dateValue = (value) => value instanceof Date && !isNaN(value) ? value : null;
   const groups = {};
   data.forEach((row) => (groups[row.plano] ||= []).push(row));
@@ -1262,25 +1279,25 @@ function buildExcelChartDefinitions(data) {
       chartKey: "angle", sheetName: "Gráfico Ângulo", title: "Ângulo frontal por furo",
       headers: ["Plano", "ID", "Data", "Ângulo frontal (°)", "Dentro do limite"],
       widths: [18, 10, 14, 20, 20],
-      rows: data.filter((row) => row.angle != null).map((row) => [row.plano, row.id, dateValue(row.data), row.angle, withinAngle(row.angle) ? "Sim" : "Não"]),
+      rows: data.filter((row) => row.angle != null).map((row) => [row.plano, row.id, dateValue(row.data), row.angle, textoDentro(angleInside(row))]),
     },
     {
       chartKey: "direction", sheetName: "Gráfico Direção", title: "Direção dos furos · Δ Azimute × Δ Profundidade",
       headers: ["Plano", "ID", "Data", "Δ Azimute (°)", "Δ Profundidade (m)", "Dentro da caixa"],
       widths: [18, 10, 14, 18, 23, 18],
-      rows: data.filter((row) => row.azDelta != null && row.depthDelta != null).map((row) => [row.plano, row.id, dateValue(row.data), row.azDelta, row.depthDelta, withinAz(row.azDelta) && withinZ(row.depthDelta) ? "Sim" : "Não"]),
+      rows: data.filter((row) => row.azDelta != null && row.depthDelta != null).map((row) => [row.plano, row.id, dateValue(row.data), row.azDelta, row.depthDelta, textoDentro(azInside(row) === true && zInside(row) === true)]),
     },
     {
       chartKey: "az", sheetName: "Gráfico Δ Azimute", title: "Δ Azimute por furo",
       headers: ["Plano", "ID", "Data", "Δ Azimute (°)", "Dentro do limite"],
       widths: [18, 10, 14, 18, 20],
-      rows: data.filter((row) => row.azDelta != null).map((row) => [row.plano, row.id, dateValue(row.data), row.azDelta, withinAz(row.azDelta) ? "Sim" : "Não"]),
+      rows: data.filter((row) => row.azDelta != null).map((row) => [row.plano, row.id, dateValue(row.data), row.azDelta, textoDentro(azInside(row))]),
     },
     {
       chartKey: "depth", sheetName: "Gráfico Δ Profundidade", title: "Δ Profundidade por furo",
       headers: ["Plano", "ID", "Data", "Δ Profundidade (m)", "Dentro do limite"],
       widths: [18, 10, 14, 23, 20],
-      rows: data.filter((row) => row.depthDelta != null).map((row) => [row.plano, row.id, dateValue(row.data), row.depthDelta, withinZ(row.depthDelta) ? "Sim" : "Não"]),
+      rows: data.filter((row) => row.depthDelta != null).map((row) => [row.plano, row.id, dateValue(row.data), row.depthDelta, textoDentro(zInside(row))]),
     },
     {
       chartKey: "byPlan", sheetName: "Gráfico por Plano", title: "Aderência por plano",
@@ -1335,9 +1352,6 @@ async function exportToXlsx(btn = document.getElementById("export-xlsx")) {
     ? "Todos"
     : (meses[Number(selectedMonth) - 1] || selectedMonth);
 
-  const withinAngle = (v) => v != null && v > LIMITS.angleMin && v < LIMITS.angleMax;
-  const withinAz = (v) => v != null && Math.abs(v) < LIMITS.azimuth;
-  const withinZ = (v) => v != null && Math.abs(v) < LIMITS.depth;
 
   const fmtDate = (d) => (d instanceof Date && !isNaN(d))
     ? `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`
@@ -1355,9 +1369,9 @@ async function exportToXlsx(btn = document.getElementById("export-xlsx")) {
     "Profundidade planejada (m)": r.depthPlan,
     "Profundidade executada (m)": r.depthExec,
     "Δ Profundidade (m)": r.depthDelta,
-    "Ângulo dentro do limite": r.angle == null ? "" : (withinAngle(r.angle) ? "Sim" : "Não"),
-    "Azimute dentro do limite": r.azDelta == null ? "" : (withinAz(r.azDelta) ? "Sim" : "Não"),
-    "Z dentro do limite": r.depthDelta == null ? "" : (withinZ(r.depthDelta) ? "Sim" : "Não"),
+    "Ângulo dentro do limite": textoDentro(angleInside(r)),
+    "Azimute dentro do limite": textoDentro(azInside(r)),
+    "Z dentro do limite": textoDentro(zInside(r)),
   }));
 
   // Aba de resumo com métricas

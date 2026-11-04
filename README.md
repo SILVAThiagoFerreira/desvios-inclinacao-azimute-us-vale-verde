@@ -11,7 +11,7 @@ consolidada de furos perfurados e apresenta a aderência ao projeto conforme os
 | Δ Profundidade Medida (m) | 0,00 m ± 0,20 m (20 cm)                         |
 | Meta de aderência  | mínimo 80% dos furos                            |
 
-Limites exclusivos: valor exatamente igual ao limite fica fora ("Não"). Ângulo: faixa aberta entre 11,8° e 18,2°. Azimute e profundidade: |Δ| menor que o limite.
+Dentro ou fora vem da planilha: colunas `Ângulo/Azimute/Z dentro do limite` (Sim/Não). Se a flag estiver vazia ou N/A e houver valor, vale a regra numérica estrita: ângulo entre 11,8° e 18,2° sem os extremos; azimute e profundidade com |Δ| menor que o limite (valor igual ao limite fica fora). Sem flag e sem valor, o furo não entra na conta.
 
 ## Parâmetros de análise pela planilha
 
@@ -111,7 +111,7 @@ O bloco "Aderência em planta" compara, em cada plano, o collar previsto com o c
 - **Tolerâncias:** deslocamento XY (distância em planta) ≤ 2 × diâmetro projetado do furo,
   com o diâmetro da coluna `DIAMETRO` em milímetros (101,6 mm = limite de 0,2032 m; 127 mm =
   limite de 0,254 m; 139,7 mm = limite de 0,2794 m).
-  Furos sem diâmetro usam 0,50 m (`COLLAR_TOL_XY`). Z: usa o desvio de profundidade do furo (Δ PROFUNDIDADE da planilha, real − previsto) com o mesmo limite de profundidade do site (±0,20 m por padrão, `LIMITS.depth`). A diferença de cota do collar não entra no cálculo de Z.
+  Furos sem diâmetro usam 0,50 m (`COLLAR_TOL_XY`). Z: usa o desvio de profundidade do furo (Δ PROFUNDIDADE da planilha, real − previsto) com o mesmo limite de profundidade do site (±0,20 m por padrão, `LIMITS.depth`). O dentro/fora de Z segue a flag `Z dentro do limite` da planilha. A diferença de cota do collar não entra no cálculo de Z.
 - **Dois mapas:** o bloco mostra dois mapas em planta do mesmo filtro, lado a lado (em tela estreita, um embaixo do outro): **Planta XY** (distância em planta) e **Planta Z** (desvio de profundidade do furo). Cada um tem seu botão "Ver todos os planos".
 - **Cores (Planta XY):** verde, dentro da tolerância XY; vermelho, fora. **Cores (Planta Z):** verde, desvio de profundidade dentro de ±0,20 m; vermelho, fora; cinza, furo sem registro de profundidade no período. Nos dois, azul é realizado sem previsto correspondente (não entra no cálculo) e anel tracejado é previsto sem furo realizado.
 - O botão "Ver todos os planos" de cada mapa abre uma janela com um bloco de planta por plano do filtro, colorido pelo eixo daquele mapa. Role a janela para ver todos; em cada plano, Ctrl + roda do mouse dá zoom e o arraste move.
@@ -127,13 +127,13 @@ O mapa 3D (bloco "Mapa de execução") usa o mesmo pareamento da planta:
 - **Tubo previsto (cinza, semitransparente):** linha teórica do DXF (camada `THEORETICAL HOLE`), com o início no emboque previsto pareado.
 - **Emboque realizado (esfera azul):** ponto da camada `HOLE` do DXF. Sem ponto, usa o início do executado; nunca o previsto. Com os furos ocultos, cada emboque vira um círculo achatado no chão.
 - **Linha previsto × realizado:** aparece quando a distância passa de 0,10 m (`COLLAR_LINK_MIN` em `map3d.js`).
-- A legenda da página mostra só Planejado, Executado e Emboque; o anel e a esfera ainda não têm item próprio.
+- A legenda de camadas do mapa 3D tem os itens Emboque previsto e Emboque realizado (ligam e desligam as camadas). A legenda fixa do mapa mostra só Planejado, Executado e Emboque.
 
 ## Pendências de dados
 
 Itens da conferência de 04/11/2026. Nenhum foi corrigido na planilha: cabe ao responsável pelos dados.
 
-1. **Flags de limite na planilha.** Nos valores exatamente no limite, a coluna "dentro do limite" não segue uma regra única. Δ Profundidade = +0,20 m: 10 "Sim" e 7 "Não"; = −0,20 m: 13 "Sim" e 12 "Não"; ângulo = 18,2°: 4 "Sim" e 1 "Não". O site aplica a regra estrita (no limite = "Não"). Recalcular essas flags pela mesma regra.
+1. **Flags no valor exato do limite.** Na janela de 1.780 linhas, a planilha marca "Sim" em 23 linhas de Z com Δ Profundidade = ±0,20 m (13 em −0,20 e 10 em +0,20) e em 4 linhas de ângulo com 18,2°, valores que a regra estrita daria "Não". O site segue a planilha, então esses furos contam como dentro. Confirmar se a planilha está certa; se não estiver, corrigir a flag na planilha (o site acompanha).
 2. **PC-23B e PC-23C.** 48 linhas com `Data` = 19/06/2026, mas `Ano` = 2026 e `Mês` = 4 (abril). O site usa `Data`, então elas aparecem em junho. Confirmar a data correta.
 3. **PC-24.** 191 de 193 linhas sem azimute planejado e sem Δ Azimute (ficam fora do KPI de azimute).
 4. **Δ Azimute fora de escala.** PC-14, IDs 108–126: entre −95,4° e +107,9°. PC651026, ID 380: −147,93°. Conferir se é erro de leitura ou de furo.
