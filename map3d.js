@@ -429,7 +429,7 @@ function main() {
 
     // Altura do texto proporcional ao tamanho do conjunto
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    holes.forEach((h) => [h.collar, ...(h.planned || []), ...(h.real || [])].forEach((p) => {
+    holes.forEach((h) => [h.collar, ...(plannedLine(h) || []), ...(h.real || [])].forEach((p) => {
       if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return;
       minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
       minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
@@ -445,7 +445,7 @@ function main() {
     g(0, "SECTION"); g(2, "ENTITIES");
 
     holes.forEach((h) => {
-      const collar = h.collar || (h.planned && h.planned[0]) || (h.real && h.real[0]);
+      const collar = h.collar || plannedLine(h)?.[0] || (h.real && h.real[0]);
       if (collar && Number.isFinite(collar.x)) {
         g(0, "POINT"); g(8, "HOLE"); pt(10, collar);
       }
@@ -453,10 +453,11 @@ function main() {
       if (pc && Number.isFinite(pc.x)) {
         g(0, "POINT"); g(8, "THEORETICAL COLLAR"); pt(10, pc);
       }
-      if (h.planned && h.planned.length >= 2) {
+      const pl = plannedLine(h);
+      if (pl) {
         g(0, "LINE"); g(8, "THEORETICAL HOLE");
-        pt(10, h.planned[0]);
-        g(11, num(h.planned[1].x)); g(21, num(h.planned[1].y)); g(31, num(h.planned[1].z));
+        pt(10, pl[0]);
+        g(11, num(pl[1].x)); g(21, num(pl[1].y)); g(31, num(pl[1].z));
       }
       if (h.real && h.real.length >= 2) {
         g(0, "POLYLINE"); g(8, "REAL HOLE"); g(66, 1); g(10, 0); g(20, 0); g(30, 0);
@@ -486,11 +487,24 @@ function main() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  // Linha teórica do furo como deve aparecer: o início vai para o emboque previsto pareado
+  // (PLANEJADO, vindo de app.js) e o furo inteiro anda com a mesma diferença, mantendo a
+  // direção e o comprimento do DXF. Sem par, fica como veio do DXF.
+  function plannedLine(h) {
+    if (!h.planned || h.planned.length < 2) return null;
+    const [a, b] = h.planned;
+    if (!Number.isFinite(a.x) || !Number.isFinite(b.x)) return null;
+    const pc = h.plannedCollar;
+    if (!pc || !Number.isFinite(pc.x)) return [a, b];
+    const dx = pc.x - a.x, dy = pc.y - a.y, dz = pc.z - a.z;
+    return [{ x: pc.x, y: pc.y, z: pc.z }, { x: b.x + dx, y: b.y + dy, z: b.z + dz }];
+  }
+
   // Mediana da distância, em planta, entre cada emboque e o mais próximo dele
   function medianCollarSpacing(holes) {
     const pts = [];
     holes.forEach((h) => {
-      const c = h.collar || (h.planned && h.planned[0]) || (h.real && h.real[0]);
+      const c = h.collar || plannedLine(h)?.[0] || (h.real && h.real[0]);
       if (c && Number.isFinite(c.x) && Number.isFinite(c.y)) pts.push(c);
     });
     if (pts.length < 2) return Infinity;
@@ -535,7 +549,7 @@ function main() {
     holes.forEach((h) => {
       bound(h.collar);
       bound(h.plannedCollar);
-      (h.planned || []).forEach(bound);
+      (plannedLine(h) || []).forEach(bound);
       (h.real || []).forEach(bound);
     });
     if (!Number.isFinite(minX)) {
@@ -564,8 +578,9 @@ function main() {
     anchors = new Array(holes.length);
     holes.forEach((h, hi) => {
       let anchor = null;
-      if (h.planned && h.planned.length >= 2 && h.planned.slice(0, 2).every((p) => Number.isFinite(p.x))) {
-        const a = toWorld(h.planned[0]), b = toWorld(h.planned[1]);
+      const pl = plannedLine(h);
+      if (pl) {
+        const a = toWorld(pl[0]), b = toWorld(pl[1]);
         plannedSegs.push({ a, b, hi });
         anchor = a;
       }
@@ -642,7 +657,7 @@ function main() {
 
     // IDs dos furos: rótulo pequeno logo acima de cada emboque (camada "IDs")
     holes.forEach((h, hi) => {
-      const c = h.collar || (h.planned && h.planned[0]) || (h.real && h.real[0]);
+      const c = h.collar || plannedLine(h)?.[0] || (h.real && h.real[0]);
       if (!h.id || !c || !Number.isFinite(c.x)) return;
       const p = toWorld(c);
       const el = document.createElement("div");
