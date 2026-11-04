@@ -753,12 +753,21 @@ async function relatorioImagemMapa(plano, holes, visibleIdsByPlan) {
   }
 }
 
-/* Mapa 3D do plano: snapshot do módulo map3d.js com os furos visíveis. */
-async function relatorioImagem3d(plano, visiveis, vista) {
+/* Collar previsto pareado de um furo: mesma chave usada pelo mapa 3D da página (publishMap3D em app.js). */
+function relatorioPrevistoDoFuro(previstos, plano, h) {
+  const c = h.collar || (h.real && h.real[0]);
+  const p = previstos && c ? previstos.get(`${plano}|${c.x}|${c.y}|${c.z}`) : null;
+  return p ? { x: p.x, y: p.y, z: p.z } : null;
+}
+
+/* Mapa 3D do plano: snapshot do módulo map3d.js com os furos visíveis. O previsto pareado
+   (plannedCollar) faz o tubo teórico começar no emboque previsto, como no mapa da página. */
+async function relatorioImagem3d(plano, visiveis, vista, previstos) {
   if (typeof window.map3dSnapshot !== "function" || !visiveis.length) return null;
   try {
     const lista = visiveis.map((h) => ({
       plano, id: h.id || null, collar: h.collar || null, planned: h.planned || null, real: h.real || null,
+      plannedCollar: relatorioPrevistoDoFuro(previstos, plano, h),
     }));
     const url = window.map3dSnapshot(lista,
       Math.round(RL.LARGURA * RELATORIO_CSS_PX_MM), Math.round(150 * RELATORIO_CSS_PX_MM), vista);
@@ -796,13 +805,15 @@ async function relatorioColetar(plano) {
   if (!PLANEJADO) {
     try { await loadPlanejado(); } catch (e) { /* sem coordenadas previstas: a planta não é desenhada */ }
   }
+  // Previsto pareado de todos os furos do DXF do plano (sem filtro de período, como no mapa 3D da página)
+  const previstos = holes && PLANEJADO ? map3dPlannedByCollar([{ plano, holes }]) : null;
   const planta = holes && PLANEJADO ? plantaParear(plano, holes, plantaTimeFilter()) : null;
   // Inclinação e azimute do plano vêm dos registros do período (mesma base dos KPIs)
   const pm = planta ? plantaMetrics(planta.matches, registros) : null;
   const visiveis = holes ? holes.filter((h) => holeVisivel(plano, h, visibleIdsByPlan)) : [];
   const mapa = holes ? await relatorioImagemMapa(plano, holes, visibleIdsByPlan) : null;
-  const img3d = await relatorioImagem3d(plano, visiveis, "frente");
-  const img3dB = await relatorioImagem3d(plano, visiveis, "oposta");
+  const img3d = await relatorioImagem3d(plano, visiveis, "frente", previstos);
+  const img3dB = await relatorioImagem3d(plano, visiveis, "oposta", previstos);
   const hs = histogramas(registros);
 
   const g = {
