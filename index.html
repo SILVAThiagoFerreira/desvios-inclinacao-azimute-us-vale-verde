@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="./assets/enaex-favicon.png">
   <meta name="description" content="Análise de desvios de inclinação, azimute e profundidade dos furos de perfuração — US Vale Verde.">
   <link rel="preconnect" href="https://docs.google.com">
-  <link rel="stylesheet" href="./styles.css?v=35">
+  <link rel="stylesheet" href="./styles.css?v=36">
 </head>
 <body>
   <header class="topbar">
@@ -339,8 +339,12 @@
               <span class="map-legend__swatch map-legend__swatch--real"></span>Executado
             </label>
             <label class="map-legend__item map3d-layer">
+              <input type="checkbox" data-map3d-layer="collarPlanned" checked>
+              <span class="map-legend__swatch map-legend__swatch--collar-planned3d"></span>Emboque previsto
+            </label>
+            <label class="map-legend__item map3d-layer">
               <input type="checkbox" data-map3d-layer="collar" checked>
-              <span class="map-legend__swatch map-legend__swatch--collar3d"></span>Emboque
+              <span class="map-legend__swatch map-legend__swatch--collar3d"></span>Emboque realizado
             </label>
             <label class="map-legend__item map3d-layer">
               <input type="checkbox" data-map3d-layer="labels">
@@ -527,9 +531,9 @@
       }
     }
   </script>
-  <script type="module" src="./map3d.js?v=14"></script>
+  <script type="module" src="./map3d.js?v=15"></script>
   <script src="./planta.js?v=22"></script>
-  <script src="./relatorio-plano.js?v=18"></script>
+  <script src="./relatorio-plano.js?v=19"></script>
   <script src="./app.js?v=29"></script>
   <script src="./excel-export-v2.js?v=5"></script>
 </body>

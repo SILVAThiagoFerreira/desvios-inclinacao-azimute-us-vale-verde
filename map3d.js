@@ -2,7 +2,8 @@
    Mapa 3D de execução — Desvios de Perfuração
    Recebe os furos visíveis do mapa 2D (evento "map3d:data", publicado
    por app.js) e desenha planejado (tubos semitransparentes), executado
-   (segmentos vermelhos) e emboques (esferas azuis) em uma cena girável.
+   (segmentos vermelhos) e emboques previstos (anel cinza) e realizados
+   (esfera azul) em uma cena girável.
    Controles: botão esquerdo/direito gira, botão do meio move, roda aproxima.
    Clique em um furo para ver ID e informações.
    ============================================================ */
@@ -14,6 +15,7 @@ const COLORS = {
   planned: 0x6c747b,
   real: 0xe20613,
   collar: 0x1d2a9c,
+  collarPlanned: 0x8a8f96,
   selected: 0xf5b700,
   background: 0xfbfbfc,
   gridMain: 0xb8bec4,
@@ -22,7 +24,7 @@ const COLORS = {
 const PLANNED_OPACITY = 0.4;
 // Sensibilidade média: metade da velocidade padrão do OrbitControls
 const SPEED = { rotate: 0.5, zoom: 0.5, pan: 0.5 };
-const LAYER_KEYS = ["planned", "real", "collar", "grid", "labels"];
+const LAYER_KEYS = ["planned", "real", "collar", "collarPlanned", "grid", "labels"];
 // Vistas do mapa 3D no relatório: direção da câmera a partir do centro (em raios da cena).
 // "frente": oblíqua do lado padrão do site; "oposta": oblíqua do lado oposto, mais alta.
 const REPORT_VIEWS = {
@@ -420,7 +422,7 @@ function main() {
     const g = (code, value) => out.push(String(code), String(value));
     const num = (v) => (Number.isFinite(v) ? v : 0).toFixed(4);
     const pt = (code, p) => { g(10, num(p.x)); g(20, num(p.y)); g(30, num(p.z)); };
-    const layers = ["HOLE", "THEORETICAL HOLE", "REAL HOLE", "NUMBER"];
+    const layers = ["HOLE", "THEORETICAL HOLE", "THEORETICAL COLLAR", "REAL HOLE", "NUMBER"];
 
     // Altura do texto proporcional ao tamanho do conjunto
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
@@ -443,6 +445,9 @@ function main() {
       const collar = h.collar || (h.planned && h.planned[0]) || (h.real && h.real[0]);
       if (collar && Number.isFinite(collar.x)) {
         g(0, "POINT"); g(8, "HOLE"); pt(10, collar);
+      }
+      if (h.planned && h.planned.length >= 2 && Number.isFinite(h.planned[0].x)) {
+        g(0, "POINT"); g(8, "THEORETICAL COLLAR"); pt(10, h.planned[0]);
       }
       if (h.planned && h.planned.length >= 2) {
         g(0, "LINE"); g(8, "THEORETICAL HOLE");
@@ -548,13 +553,15 @@ function main() {
 
     const plannedSegs = [];
     const realSegs = [];
-    const collars = [];
+    const collars = [];        // emboque realizado
+    const plannedCollars = []; // emboque previsto (início do furo teórico)
     anchors = new Array(holes.length);
     holes.forEach((h, hi) => {
       let anchor = null;
       if (h.planned && h.planned.length >= 2 && h.planned.slice(0, 2).every((p) => Number.isFinite(p.x))) {
         const a = toWorld(h.planned[0]), b = toWorld(h.planned[1]);
         plannedSegs.push({ a, b, hi });
+        plannedCollars.push({ p: a, hi });
         anchor = a;
       }
       if (h.real && h.real.length >= 2) {
@@ -563,7 +570,8 @@ function main() {
         }
         anchor = anchor || toWorld(h.real[0]);
       }
-      const c = h.collar || (h.planned && h.planned[0]) || (h.real && h.real[0]);
+      // Emboque realizado: ponto do DXF ou início do executado (nunca o previsto)
+      const c = h.collar || (h.real && h.real[0]);
       if (c && Number.isFinite(c.x)) {
         const p = toWorld(c);
         collars.push({ p, hi });
@@ -630,7 +638,7 @@ function main() {
       layerGroups.labels.add(label);
     });
 
-    // Emboques: esferas azuis (ou, com furos ocultos, círculos achatados no chão)
+    // Emboques realizados: esferas azuis (ou, com furos ocultos, círculos achatados no chão)
     collarMeshes = {};
     if (collars.length) {
       const holeOf = [];
@@ -655,6 +663,25 @@ function main() {
       layerGroups.collar.add(sphereMesh, discMesh);
       collarMeshes = { sphere: sphereMesh, disc: discMesh };
       pickEntries.push({ key: "collar", mesh: sphereMesh, holeOf, alt: discMesh });
+    }
+
+    // Emboque previsto: anel cinza deitado em volta do ponto previsto. Fica maior que a
+    // esfera realizada, então continua visível mesmo quando os dois emboques coincidem.
+    if (plannedCollars.length) {
+      const ringMesh = new THREE.InstancedMesh(
+        new THREE.TorusGeometry(rad * 1.9, rad * 0.25, 6, 20).rotateX(Math.PI / 2),
+        new THREE.MeshStandardMaterial({ color: COLORS.collarPlanned, roughness: 0.5 }),
+        plannedCollars.length,
+      );
+      const holeOf = [];
+      plannedCollars.forEach(({ p, hi }, i) => {
+        m.makeTranslation(p.x, p.y, p.z);
+        ringMesh.setMatrixAt(i, m);
+        holeOf[i] = hi;
+      });
+      ringMesh.instanceMatrix.needsUpdate = true;
+      layerGroups.collarPlanned.add(ringMesh);
+      pickEntries.push({ key: "collarPlanned", mesh: ringMesh, holeOf });
     }
 
     // Caixa envolvente em coordenadas da cena
@@ -710,7 +737,7 @@ function main() {
         controls.update();
       }
       // Camadas do relatório sempre ligadas, sem depender dos checkboxes da página
-      ["planned", "real", "collar", "grid"].forEach((k) => { layerGroups[k].visible = true; });
+      ["planned", "real", "collar", "collarPlanned", "grid"].forEach((k) => { layerGroups[k].visible = true; });
       layerGroups.labels.visible = false;
       if (collarMeshes.sphere) collarMeshes.sphere.visible = true;
       if (collarMeshes.disc) collarMeshes.disc.visible = false;

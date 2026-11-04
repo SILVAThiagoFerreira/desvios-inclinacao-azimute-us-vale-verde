@@ -438,7 +438,8 @@ function relatorioPaginaMapa3d(ops, img) {
   relatorioLegenda(ops, M, TOPO + h + 9, [
     { t: "linha", c: RL.CINZA_CLARO, texto: "Planejado (tubos translúcidos)" },
     { t: "linha", c: RL.VERMELHO, texto: "Executado" },
-    { t: "dot", c: RL.AZUL_3D, texto: "Emboque" },
+    { t: "ring", c: RL.CINZA_CLARO, texto: "Emboque previsto" },
+    { t: "dot", c: RL.AZUL_3D, texto: "Emboque realizado" },
   ]);
 }
 

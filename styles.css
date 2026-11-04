@@ -566,6 +566,10 @@ body {
 .map-legend__swatch--collar3d {
   width: 10px; height: 10px; border-radius: 50%; background: #1d2a9c;
 }
+.map-legend__swatch--collar-planned3d {
+  width: 10px; height: 10px; border-radius: 50%; box-sizing: border-box;
+  border: 2px solid #8a8f96; background: transparent;
+}
 .map3d-tools {
   position: absolute;
   top: 12px;
