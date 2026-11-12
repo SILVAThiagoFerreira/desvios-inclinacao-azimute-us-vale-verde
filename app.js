@@ -360,14 +360,13 @@ function buildRecords(table) {
       mes = dateMes;
     }
 
-    // Regra atual: mantém somente registros de nov/2025 em diante,
-    // pulando nov/2026. Alterar aqui se a janela mudar.
+    // Janela de dados: mantém registros de nov/2025 em diante. Não há mais mês
+    // excluído: o antigo corte de nov/2026 escondia planos de novembro/2026
+    // (ex.: PC611126_B, de 03/11/2026). Alterar MIN_YM se a janela mudar.
     if (ano == null || mes == null) continue;
     const ymKey = ano * 12 + (mes - 1);
     const MIN_YM = 2025 * 12 + (11 - 1);  // nov/2025
-    const SKIP_YM = 2026 * 12 + (11 - 1); // nov/2026
     if (ymKey < MIN_YM) continue;
-    if (ymKey === SKIP_YM) continue;
 
     recs.push({
       plano: String(plano).trim(),
