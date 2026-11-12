@@ -23,6 +23,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Gravar id do build (atualização automática)
+        run: |
+          printf '{"build":"%s"}\n' "$GITHUB_SHA" > version.json
+          sed -i "s/__BUILD_ID__/$GITHUB_SHA/" index.html
+          grep -c "$GITHUB_SHA" index.html version.json
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload site artifact

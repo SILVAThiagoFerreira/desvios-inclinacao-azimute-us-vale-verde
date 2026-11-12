@@ -16,6 +16,8 @@ A rotina de atualização (DXF + Projetado + análise de desvios → planilha pr
 
 Este repositório só precisa de commit quando muda `data/` (DXF de fallback e `data/dxf-manifest.json`) ou código. Ao alterar um `.js` publicado, incrementar o `?v=` correspondente em `index.html`.
 
+**Atualização automática (desde 12/11/2026):** o `pages.yml` grava o id do build (SHA do commit) em `index.html` (meta `build`) e em `version.json`. O `build-check.js` compara os dois a cada 5 min e recarrega a página quando o id muda. Abas abertas antes dessa mudança (sem o `build-check.js`) precisam de um Ctrl+F5 uma única vez. Ao recarregar, filtros voltam ao padrão.
+
 ## 1. Entradas recebidas por plano
 
 Para cada plano (ex.: `PC651026`) chegam três arquivos:
